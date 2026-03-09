@@ -1,0 +1,38 @@
+{
+  "name": "claudefy",
+  "version": "0.1.0",
+  "description": "Sync your Claude Code environment across machines",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "claudefy": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kodrunhq/claudefy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kodrunhq/claudefy/issues"
+  },
+  "homepage": "https://github.com/kodrunhq/claudefy#readme",
+  "dependencies": {
+    "commander": "^14.0.3",
+    "deepmerge": "^4.3.1",
+    "simple-git": "^3.32.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
