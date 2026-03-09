@@ -23,6 +23,10 @@ export class ConfigManager {
   }
 
   async initialize(backendUrl: string): Promise<ClaudefyConfig> {
+    if (this.isInitialized()) {
+      throw new Error("claudefy is already initialized. Use 'load()' to read existing config.");
+    }
+
     await mkdir(this.configDir, { recursive: true });
     await mkdir(join(this.configDir, "backups"), { recursive: true });
 
@@ -61,7 +65,11 @@ export class ConfigManager {
     const parts = key.split(".");
     let obj: Record<string, unknown> = config as unknown as Record<string, unknown>;
     for (let i = 0; i < parts.length - 1; i++) {
-      obj = obj[parts[i]] as Record<string, unknown>;
+      const next = obj[parts[i]];
+      if (next === undefined || next === null || typeof next !== "object") {
+        throw new Error(`Invalid config key: "${key}" — "${parts[i]}" is not an object`);
+      }
+      obj = next as Record<string, unknown>;
     }
     obj[parts[parts.length - 1]] = value;
     await this.saveConfig(config);
