@@ -145,10 +145,10 @@ describe("PathMapper", () => {
           ],
         },
       };
-      const claudeDir = "/Users/jose/.claude";
+      const claudeDir = "/Users/user/.claude";
       const result = mapper.remapSettingsPaths(settings, claudeDir);
       expect(result.hooks.SessionStart[0].hooks[0].command).toBe(
-        'node "/Users/jose/.claude/hooks/gsd-check-update.js"'
+        'node "/Users/user/.claude/hooks/gsd-check-update.js"'
       );
     });
   });
@@ -191,12 +191,12 @@ describe("PathMapper", () => {
           ],
         },
       };
-      const claudeDir = "/Users/jose/.claude";
+      const claudeDir = "/Users/user/.claude";
       const result = mapper.remapPluginPaths(plugins, claudeDir);
       expect(
         result.plugins["github@claude-plugins-official"][0].installPath
       ).toBe(
-        "/Users/jose/.claude/plugins/cache/claude-plugins-official/github/205b6e0b3036"
+        "/Users/user/.claude/plugins/cache/claude-plugins-official/github/205b6e0b3036"
       );
     });
   });

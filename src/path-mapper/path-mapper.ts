@@ -13,9 +13,11 @@ export class PathMapper {
     this.dirNameToCanonical = new Map();
 
     for (const [alias, info] of Object.entries(links)) {
+      // Normalize trailing slash from localPath
+      const normalizedPath = info.localPath.replace(/\/+$/, "");
       this.canonicalToAlias.set(info.canonicalId, alias);
       // Pre-compute the encoded dir name for each link
-      const encoded = this.pathToDirName(info.localPath);
+      const encoded = this.pathToDirName(normalizedPath);
       this.dirNameToCanonical.set(encoded, info.canonicalId);
     }
   }
@@ -82,8 +84,9 @@ export class PathMapper {
 
   private normalizePathField(value: string): string {
     for (const [alias, info] of Object.entries(this.links)) {
-      if (value === info.localPath || value.startsWith(info.localPath + "/")) {
-        return `@@${alias}@@${value.slice(info.localPath.length)}`;
+      const localPath = info.localPath.replace(/\/+$/, "");
+      if (value === localPath || value.startsWith(localPath + "/")) {
+        return `@@${alias}@@${value.slice(localPath.length)}`;
       }
     }
     return value;
@@ -96,6 +99,6 @@ export class PathMapper {
     const suffix = match[2];
     const info = this.links[alias];
     if (!info) return value;
-    return info.localPath + suffix;
+    return info.localPath.replace(/\/+$/, "") + suffix;
   }
 }

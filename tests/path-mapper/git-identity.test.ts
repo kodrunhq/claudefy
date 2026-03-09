@@ -35,6 +35,7 @@ describe("GitIdentity", () => {
 
     const identity = new GitIdentity();
     const result = await identity.detect(tempDir);
+    expect(result).not.toBeNull();
     expect(result!.canonicalId).toBe("github.com--kodrunhq--kodrun");
   });
 
@@ -60,6 +61,7 @@ describe("GitIdentity", () => {
 
     const identity = new GitIdentity();
     const result = await identity.detect(tempDir);
+    expect(result).not.toBeNull();
     expect(result!.canonicalId).toBe("github.com--kodrunhq--kodrun");
   });
 });
