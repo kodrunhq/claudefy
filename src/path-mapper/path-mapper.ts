@@ -4,35 +4,30 @@ const CLAUDE_DIR_SENTINEL = "@@CLAUDE_DIR@@";
 
 export class PathMapper {
   private links: LinksConfig;
-  private pathToAlias: Map<string, string>;
   private canonicalToAlias: Map<string, string>;
+  private dirNameToCanonical: Map<string, string>;
 
   constructor(links: LinksConfig) {
     this.links = links;
-    this.pathToAlias = new Map();
     this.canonicalToAlias = new Map();
+    this.dirNameToCanonical = new Map();
 
     for (const [alias, info] of Object.entries(links)) {
-      this.pathToAlias.set(info.localPath, alias);
       this.canonicalToAlias.set(info.canonicalId, alias);
+      // Pre-compute the encoded dir name for each link
+      const encoded = this.pathToDirName(info.localPath);
+      this.dirNameToCanonical.set(encoded, info.canonicalId);
     }
   }
 
   normalizeDirName(dirName: string): string | null {
-    const path = dirName.replace(/^-/, "/").replace(/-/g, "/");
-    for (const [alias, info] of Object.entries(this.links)) {
-      if (path === info.localPath) {
-        return info.canonicalId;
-      }
-    }
-    return null;
+    return this.dirNameToCanonical.get(dirName) ?? null;
   }
 
   remapDirName(canonicalId: string): string | null {
     const alias = this.canonicalToAlias.get(canonicalId);
     if (!alias) return null;
-    const localPath = this.links[alias].localPath;
-    return localPath.replace(/\//g, "-").replace(/^-/, "-");
+    return this.pathToDirName(this.links[alias].localPath);
   }
 
   normalizeJsonlLine(line: string): string {
@@ -57,28 +52,32 @@ export class PathMapper {
     return JSON.stringify(obj);
   }
 
-  normalizeSettingsPaths(settings: any, claudeDir: string): any {
-    const json = JSON.stringify(settings);
-    const normalized = json.replaceAll(claudeDir, CLAUDE_DIR_SENTINEL);
-    return JSON.parse(normalized);
+  normalizeSettingsPaths<T>(settings: T, claudeDir: string): T {
+    return this.replaceInSerialized(settings, claudeDir, CLAUDE_DIR_SENTINEL);
   }
 
-  remapSettingsPaths(settings: any, claudeDir: string): any {
-    const json = JSON.stringify(settings);
-    const remapped = json.replaceAll(CLAUDE_DIR_SENTINEL, claudeDir);
-    return JSON.parse(remapped);
+  remapSettingsPaths<T>(settings: T, claudeDir: string): T {
+    return this.replaceInSerialized(settings, CLAUDE_DIR_SENTINEL, claudeDir);
   }
 
-  normalizePluginPaths(plugins: any, claudeDir: string): any {
-    const json = JSON.stringify(plugins);
-    const normalized = json.replaceAll(claudeDir, CLAUDE_DIR_SENTINEL);
-    return JSON.parse(normalized);
+  normalizePluginPaths<T>(plugins: T, claudeDir: string): T {
+    return this.replaceInSerialized(plugins, claudeDir, CLAUDE_DIR_SENTINEL);
   }
 
-  remapPluginPaths(plugins: any, claudeDir: string): any {
-    const json = JSON.stringify(plugins);
-    const remapped = json.replaceAll(CLAUDE_DIR_SENTINEL, claudeDir);
-    return JSON.parse(remapped);
+  remapPluginPaths<T>(plugins: T, claudeDir: string): T {
+    return this.replaceInSerialized(plugins, CLAUDE_DIR_SENTINEL, claudeDir);
+  }
+
+  private replaceInSerialized<T>(value: T, search: string, replacement: string): T {
+    const json = JSON.stringify(value);
+    const updated = json.replaceAll(search, replacement);
+    return JSON.parse(updated) as T;
+  }
+
+  private pathToDirName(localPath: string): string {
+    // Claude Code encodes paths by replacing / with -
+    // e.g. /home/user/project -> -home-user-project
+    return localPath.replace(/\//g, "-");
   }
 
   private normalizePathField(value: string): string {

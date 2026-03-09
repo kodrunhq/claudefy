@@ -5,13 +5,13 @@ import type { LinksConfig } from "../../src/config/types.js";
 describe("PathMapper", () => {
   const links: LinksConfig = {
     kodrun: {
-      localPath: "/home/joseibanez/develop/projects/kodrun",
+      localPath: "/home/user/projects/kodrun",
       canonicalId: "github.com--kodrunhq--kodrun",
       gitRemote: "git@github.com:kodrunhq/kodrun.git",
       detectedAt: "2026-03-09T14:00:00Z",
     },
     claudefy: {
-      localPath: "/home/joseibanez/develop/projects/claudefy",
+      localPath: "/home/user/projects/claudefy",
       canonicalId: "github.com--kodrunhq--claudefy",
       gitRemote: "git@github.com:kodrunhq/claudefy.git",
       detectedAt: "2026-03-09T14:00:00Z",
@@ -23,14 +23,14 @@ describe("PathMapper", () => {
   describe("project directory names", () => {
     it("normalizes directory name to canonical ID on push", () => {
       const result = mapper.normalizeDirName(
-        "-home-joseibanez-develop-projects-kodrun"
+        "-home-user-projects-kodrun"
       );
       expect(result).toBe("github.com--kodrunhq--kodrun");
     });
 
     it("remaps canonical ID back to local dir name on pull", () => {
       const result = mapper.remapDirName("github.com--kodrunhq--kodrun");
-      expect(result).toBe("-home-joseibanez-develop-projects-kodrun");
+      expect(result).toBe("-home-user-projects-kodrun");
     });
 
     it("returns null for unlinked directories on push", () => {
@@ -42,13 +42,30 @@ describe("PathMapper", () => {
       const result = mapper.remapDirName("github.com--unknown--repo");
       expect(result).toBeNull();
     });
+
+    it("handles paths with hyphens in segments", () => {
+      const hyphenLinks: LinksConfig = {
+        myproject: {
+          localPath: "/home/user/my-project",
+          canonicalId: "github.com--user--my-project",
+          gitRemote: "git@github.com:user/my-project.git",
+          detectedAt: "2026-03-09T14:00:00Z",
+        },
+      };
+      const hyphenMapper = new PathMapper(hyphenLinks);
+      const result = hyphenMapper.normalizeDirName("-home-user-my-project");
+      expect(result).toBe("github.com--user--my-project");
+
+      const remapped = hyphenMapper.remapDirName("github.com--user--my-project");
+      expect(remapped).toBe("-home-user-my-project");
+    });
   });
 
   describe("history.jsonl path fields", () => {
     it("normalizes project field on push", () => {
       const line = JSON.stringify({
         display: "test",
-        project: "/home/joseibanez/develop/projects/kodrun",
+        project: "/home/user/projects/kodrun",
         timestamp: 123,
       });
       const result = mapper.normalizeJsonlLine(line);
@@ -64,14 +81,12 @@ describe("PathMapper", () => {
       });
       const result = mapper.remapJsonlLine(line);
       const parsed = JSON.parse(result);
-      expect(parsed.project).toBe(
-        "/home/joseibanez/develop/projects/kodrun"
-      );
+      expect(parsed.project).toBe("/home/user/projects/kodrun");
     });
 
     it("normalizes cwd field on push", () => {
       const line = JSON.stringify({
-        cwd: "/home/joseibanez/develop/projects/kodrun",
+        cwd: "/home/user/projects/kodrun",
         type: "user",
       });
       const result = mapper.normalizeJsonlLine(line);
@@ -100,14 +115,14 @@ describe("PathMapper", () => {
                 {
                   type: "command",
                   command:
-                    'node "/home/joseibanez/.claude/hooks/gsd-check-update.js"',
+                    'node "/home/user/.claude/hooks/gsd-check-update.js"',
                 },
               ],
             },
           ],
         },
       };
-      const claudeDir = "/home/joseibanez/.claude";
+      const claudeDir = "/home/user/.claude";
       const result = mapper.normalizeSettingsPaths(settings, claudeDir);
       expect(result.hooks.SessionStart[0].hooks[0].command).toBe(
         'node "@@CLAUDE_DIR@@/hooks/gsd-check-update.js"'
@@ -147,13 +162,13 @@ describe("PathMapper", () => {
             {
               scope: "user",
               installPath:
-                "/home/joseibanez/.claude/plugins/cache/claude-plugins-official/github/205b6e0b3036",
+                "/home/user/.claude/plugins/cache/claude-plugins-official/github/205b6e0b3036",
               version: "205b6e0b3036",
             },
           ],
         },
       };
-      const claudeDir = "/home/joseibanez/.claude";
+      const claudeDir = "/home/user/.claude";
       const result = mapper.normalizePluginPaths(plugins, claudeDir);
       expect(
         result.plugins["github@claude-plugins-official"][0].installPath
