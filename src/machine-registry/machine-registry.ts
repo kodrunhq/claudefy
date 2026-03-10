@@ -52,6 +52,33 @@ export class MachineRegistry {
     }
   }
 
+  async conditionalRegister(
+    machineId: string,
+    hostname: string,
+    os: string,
+    shouldUpdate: boolean,
+  ): Promise<void> {
+    const manifest = await this.loadManifest();
+    const existing = manifest.machines.find((m) => m.machineId === machineId);
+
+    if (existing) {
+      if (!shouldUpdate) return;
+      existing.hostname = hostname;
+      existing.os = os;
+      existing.lastSync = new Date().toISOString();
+    } else {
+      manifest.machines.push({
+        machineId,
+        hostname,
+        os,
+        lastSync: new Date().toISOString(),
+        registeredAt: new Date().toISOString(),
+      });
+    }
+
+    await this.saveManifest(manifest);
+  }
+
   async list(): Promise<MachineEntry[]> {
     const manifest = await this.loadManifest();
     return manifest.machines;
