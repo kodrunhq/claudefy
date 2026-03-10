@@ -204,6 +204,40 @@ program
     }
   });
 
+const configCmd = program
+  .command("config")
+  .description("Manage claudefy configuration");
+
+configCmd
+  .command("get [key]")
+  .description("Show full config or a specific key")
+  .action(async (key?: string) => {
+    try {
+      const { ConfigCommand } = await import("./commands/config.js");
+      const cmd = new ConfigCommand(homeDir);
+      const result = await cmd.get(key);
+      console.log(typeof result === "object" ? JSON.stringify(result, null, 2) : String(result));
+    } catch (err: any) {
+      output.error(err.message);
+      process.exit(1);
+    }
+  });
+
+configCmd
+  .command("set <key> <value>")
+  .description("Update a config value")
+  .action(async (key: string, value: string) => {
+    try {
+      const { ConfigCommand } = await import("./commands/config.js");
+      const cmd = new ConfigCommand(homeDir);
+      await cmd.set(key, value);
+      output.success(`Set ${key}`);
+    } catch (err: any) {
+      output.error(err.message);
+      process.exit(1);
+    }
+  });
+
 const hooksCmd = program
   .command("hooks")
   .description("Manage auto-sync hooks");
