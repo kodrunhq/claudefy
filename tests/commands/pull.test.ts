@@ -21,7 +21,7 @@ describe("PullCommand", () => {
 
     // Create bare remote
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
 
     // Set up Machine A with content
     const pushClaudeDir = join(pushHomeDir, ".claude");

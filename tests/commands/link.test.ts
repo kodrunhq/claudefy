@@ -18,7 +18,7 @@ describe("LinkCommand", () => {
     // Initialize claudefy config
     const configManager = new ConfigManager(homeDir);
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-link-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
     await configManager.initialize(remoteDir);
 
     // Create a fake project directory with a git repo

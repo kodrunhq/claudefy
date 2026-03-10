@@ -13,7 +13,7 @@ describe("MachinesCommand", () => {
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-machines-test-"));
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-machines-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
 
     // Create ~/.claude with some content
     const claudeDir = join(homeDir, ".claude");

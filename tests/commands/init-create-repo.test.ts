@@ -16,7 +16,7 @@ describe("InitCommand --create-repo", () => {
     await writeFile(join(claudeDir, "settings.json"), '{"key": "value"}');
 
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-init-repo-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
   });
 
   afterEach(async () => {

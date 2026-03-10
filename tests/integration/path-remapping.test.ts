@@ -16,7 +16,7 @@ describe("Path Remapping Integration", () => {
     homeDirA = await mkdtemp(join(tmpdir(), "claudefy-remap-a-"));
     homeDirB = await mkdtemp(join(tmpdir(), "claudefy-remap-b-"));
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-remap-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
   });
 
   afterEach(async () => {

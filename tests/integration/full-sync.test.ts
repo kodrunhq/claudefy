@@ -20,7 +20,7 @@ describe("Full Sync Cycle", () => {
     homeDirA = await mkdtemp(join(tmpdir(), "claudefy-int-a-"));
     homeDirB = await mkdtemp(join(tmpdir(), "claudefy-int-b-"));
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-int-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
 
     // Create Machine A's ~/.claude
     const claudeDirA = join(homeDirA, ".claude");

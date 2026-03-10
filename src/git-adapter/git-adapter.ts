@@ -7,6 +7,12 @@ import { join } from "node:path";
 
 const execFileAsync = promisify(execFile);
 
+export interface CommitResult {
+  committed: boolean;
+  pushed: boolean;
+  mergedToMain: boolean;
+}
+
 export interface OverrideMarker {
   machine: string;
   timestamp: string;
@@ -55,21 +61,103 @@ export class GitAdapter {
 
     this.git = simpleGit(this.storePath);
     await this.configureCredentialHelper(this.git, remoteUrl);
+
+    // If we cloned an empty repo, it may be on master with no commits — initialize properly
+    await this.ensureMainBranch();
   }
 
-  async commitAndPush(message: string): Promise<void> {
+  async ensureMachineBranch(machineId: string): Promise<void> {
     this.ensureInitialized();
+    const branchName = `machines/${machineId}`;
+
+    // Check if local branch exists
+    const localBranches = await this.git!.branchLocal();
+    if (localBranches.all.includes(branchName)) {
+      await this.git!.checkout(branchName);
+      return;
+    }
+
+    // Try to fetch from remote
+    try {
+      await this.git!.fetch("origin", branchName);
+      const remoteBranches = await this.git!.branch(["-r"]);
+      if (remoteBranches.all.includes(`origin/${branchName}`)) {
+        await this.git!.checkout(["-b", branchName, `origin/${branchName}`]);
+        return;
+      }
+    } catch {
+      // Remote branch doesn't exist, that's fine
+    }
+
+    // Create new local branch from current HEAD
+    await this.git!.checkoutLocalBranch(branchName);
+  }
+
+  async getCurrentBranch(): Promise<string> {
+    this.ensureInitialized();
+    const result = await this.git!.revparse(["--abbrev-ref", "HEAD"]);
+    return result.trim();
+  }
+
+  async commitAndPush(message: string, machineId?: string): Promise<CommitResult> {
+    this.ensureInitialized();
+    const result: CommitResult = { committed: false, pushed: false, mergedToMain: false };
+
     await this.git!.add(".");
     const status = await this.git!.status();
-    if (!status.isClean()) {
-      await this.git!.commit(message);
-      await this.git!.push();
+    if (status.isClean()) {
+      return result;
     }
+
+    await this.git!.commit(message);
+    result.committed = true;
+
+    await this.git!.push(["-u", "origin", await this.getCurrentBranch()]);
+    result.pushed = true;
+
+    if (machineId) {
+      const machineBranch = `machines/${machineId}`;
+      try {
+        await this.git!.checkout("main");
+        await this.git!.pull("origin", "main").catch(() => {});
+        await this.git!.merge([machineBranch]);
+        await this.git!.push(["-u", "origin", "main"]);
+        result.mergedToMain = true;
+      } catch {
+        result.mergedToMain = false;
+        // Abort any in-progress merge
+        await this.git!.merge(["--abort"]).catch(() => {});
+      } finally {
+        await this.git!.checkout(machineBranch);
+      }
+    }
+
+    return result;
   }
 
   async pull(): Promise<void> {
     this.ensureInitialized();
     await this.git!.pull();
+  }
+
+  async pullAndMergeMain(): Promise<void> {
+    this.ensureInitialized();
+    const currentBranch = await this.getCurrentBranch();
+
+    await this.git!.fetch("origin");
+
+    // Checkout main and pull latest
+    await this.git!.checkout("main");
+    await this.git!.pull("origin", "main");
+
+    // Go back to machine branch and merge main into it
+    await this.git!.checkout(currentBranch);
+    try {
+      await this.git!.merge(["main"]);
+    } catch {
+      // Merge conflict — abort, machine branch state wins
+      await this.git!.merge(["--abort"]).catch(() => {});
+    }
   }
 
   async writeOverrideMarker(machineId: string): Promise<void> {
@@ -104,6 +192,7 @@ export class GitAdapter {
 
   async wipeAndPush(machineId: string): Promise<void> {
     this.ensureInitialized();
+    const currentBranch = await this.getCurrentBranch();
     const entries = await readdir(this.storePath);
     for (const entry of entries) {
       if (entry === ".git") continue;
@@ -112,11 +201,36 @@ export class GitAdapter {
     await this.writeOverrideMarker(machineId);
     await this.git!.add(".");
     await this.git!.commit(`override: ${machineId} at ${new Date().toISOString()}`);
-    await this.git!.push(["--force"]);
+    await this.git!.push(["-u", "origin", currentBranch, "--force"]);
+
+    // If on a machine branch, also force-update main
+    if (currentBranch.startsWith("machines/")) {
+      await this.git!.checkout("main");
+      await this.git!.reset(["--hard", currentBranch]);
+      await this.git!.push(["--force", "-u", "origin", "main"]);
+      await this.git!.checkout(currentBranch);
+    }
   }
 
   getStorePath(): string {
     return this.storePath;
+  }
+
+  private async ensureMainBranch(): Promise<void> {
+    if (!this.git) return;
+    // Check if repo has any commits (empty clone scenario)
+    const hasCommits = await this.git.revparse(["HEAD"]).then(() => true).catch(() => false);
+    if (!hasCommits) {
+      // Empty cloned repo — create initial commit on main branch
+      // First, checkout -b main (we may be on master from clone default)
+      await this.git.checkout(["-b", "main"]).catch(() => {});
+      await writeFile(join(this.storePath, ".gitkeep"), "");
+      await this.git.add(".");
+      await this.git.commit("initial claudefy store");
+      await this.git.push(["-u", "origin", "main"]).catch(() => {});
+      // Update remote HEAD to point to main
+      await this.git.remote(["set-head", "origin", "main"]).catch(() => {});
+    }
   }
 
   private ensureInitialized(): void {
