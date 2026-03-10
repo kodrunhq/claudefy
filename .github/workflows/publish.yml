@@ -59,7 +59,8 @@ jobs:
         if: inputs.version_bump != 'current'
         env:
           VERSION_BUMP: ${{ inputs.version_bump }}
-        run: npm version "$VERSION_BUMP" -m "release: v%s"
+        run: |
+          npm version "$VERSION_BUMP" -m 'release: v%s'
 
       - name: Push version commit
         if: inputs.version_bump != 'current'
