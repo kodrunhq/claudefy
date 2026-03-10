@@ -98,9 +98,9 @@ Pass `--hooks` to `init` or `join` to install auto-sync hooks automatically.
 claudefy encrypts files using [age](https://age-encryption.org/) (WASM-based, no native binary needed).
 
 **Passphrase resolution order:**
-1. `CLAUDEFY_PASSPHRASE` environment variable
-2. OS keychain (requires `keytar`: `npm install -g keytar`)
-3. Passed via `--passphrase` (avoid — visible in process list)
+1. `--passphrase` CLI flag (highest priority; avoid — visible in process list)
+2. `CLAUDEFY_PASSPHRASE` environment variable
+3. OS keychain (requires `keytar`: `npm install -g keytar`)
 
 **What gets encrypted:**
 - Files in the "unknown" tier (not in allowlist or denylist) are always encrypted
@@ -121,8 +121,9 @@ Config lives at `~/.claudefy/config.json`:
 {
   "version": 1,
   "backend": { "type": "git", "url": "git@github.com:you/claude-sync.git" },
-  "encryption": { "enabled": true, "useKeychain": false },
+  "encryption": { "enabled": true, "useKeychain": false, "cacheDuration": "0" },
   "sync": { "lfsThreshold": 524288 },
+  "filter": {},
   "machineId": "hostname-abc12345"
 }
 ```
