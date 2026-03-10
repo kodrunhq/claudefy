@@ -82,7 +82,8 @@ export class HookManager {
   }
 
   private isClaudefyHookEntry(hookEntry: any): boolean {
-    return hookEntry.hooks?.some((h: any) => {
+    if (!Array.isArray(hookEntry.hooks)) return false;
+    return hookEntry.hooks.some((h: any) => {
       const command = typeof h.command === "string" ? h.command.trim() : "";
       return command.startsWith("claudefy pull") || command.startsWith("claudefy push");
     });
@@ -95,7 +96,9 @@ export class HookManager {
       try {
         return JSON.parse(content);
       } catch (err) {
-        if (err instanceof SyntaxError) return {};
+        if (err instanceof SyntaxError) {
+          throw new Error(`Invalid JSON in settings file "${this.settingsPath}": ${err.message}`);
+        }
         throw err;
       }
     } catch (err: unknown) {

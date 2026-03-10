@@ -34,10 +34,12 @@ export class PushCommand {
     // 1. Classify ~/.claude contents
     const classification = await syncFilter.classify(this.claudeDir);
 
+    const willEncrypt = config.encryption.enabled && !options.skipEncryption;
     if (!options.quiet) {
+      const unknownLabel = willEncrypt ? "unknown (encrypted)" : "unknown";
       console.log(
         `Syncing: ${classification.allowlist.length} allowed, ` +
-        `${classification.unknown.length} unknown (encrypted), ` +
+        `${classification.unknown.length} ${unknownLabel}, ` +
         `${classification.denylist.length} denied`
       );
     }
@@ -132,6 +134,9 @@ export class PushCommand {
     }
 
     // 7. Encrypt files if encryption is enabled
+    if (config.encryption.enabled && !options.skipEncryption && !options.passphrase) {
+      throw new Error("Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.");
+    }
     if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
       const encryptor = new Encryptor(options.passphrase);
 

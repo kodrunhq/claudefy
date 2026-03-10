@@ -44,6 +44,18 @@ export class StatusCommand {
       localFiles = await readdir(claudeDir);
     }
 
+    if (!existsSync(claudeDir)) {
+      return {
+        initialized: true,
+        machineId: config.machineId,
+        backendUrl: config.backend.url,
+        localFiles: [],
+        syncedFiles: [],
+        deniedFiles: [],
+        unknownFiles: [],
+      };
+    }
+
     const classification = await syncFilter.classify(claudeDir);
 
     return {

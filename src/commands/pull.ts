@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { ConfigManager } from "../config/config-manager.js";
@@ -58,9 +58,11 @@ export class PullCommand {
         console.log(`Override detected from machine: ${override.machine} at ${override.timestamp}`);
       }
 
-      // Create backup before applying override
-      const backupManager = new BackupManager(claudefyDir);
-      result.backupPath = await backupManager.createBackup(this.claudeDir, "pre-override");
+      // Create backup before applying override (skip if .claude doesn't exist yet)
+      if (existsSync(this.claudeDir)) {
+        const backupManager = new BackupManager(claudefyDir);
+        result.backupPath = await backupManager.createBackup(this.claudeDir, "pre-override");
+      }
 
       if (!options.quiet) {
         console.log(`Backup created at: ${result.backupPath}`);
@@ -72,6 +74,9 @@ export class PullCommand {
     }
 
     // 3. Decrypt .age files if encryption is enabled
+    if (config.encryption.enabled && !options.skipEncryption && !options.passphrase) {
+      throw new Error("Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.");
+    }
     if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
       const encryptor = new Encryptor(options.passphrase);
 
@@ -163,7 +168,7 @@ export class PullCommand {
       result.filesUpdated++;
     }
 
-    // 5b. Copy remaining config items (overwrite / LWW)
+    // 5b. Copy remaining config items (remote overwrites local)
     if (existsSync(configDir)) {
       const entries = await readdir(configDir, { withFileTypes: true });
       for (const entry of entries) {
@@ -186,9 +191,10 @@ export class PullCommand {
       }
     }
 
-    // 6. Update machine registry last sync time
+    // 6. Update machine registry last sync time and commit
     const registry = new MachineRegistry(join(storePath, "manifest.json"));
     await registry.updateLastSync(config.machineId);
+    await gitAdapter.commitAndPush(`sync: pull on ${config.machineId}`);
 
     if (!options.quiet) {
       console.log(`Pull complete. ${result.filesUpdated} items updated.`);

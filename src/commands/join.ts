@@ -39,9 +39,10 @@ export class JoinCommand {
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(options.backend);
 
-    // 3. Register this machine
+    // 3. Register this machine and commit
     const registry = new MachineRegistry(join(gitAdapter.getStorePath(), "manifest.json"));
     await registry.register(config.machineId, hostname(), platform());
+    await gitAdapter.commitAndPush(`sync: ${config.machineId} joined`);
 
     // 4. Run pull to get remote config
     const pullCommand = new PullCommand(this.homeDir);
