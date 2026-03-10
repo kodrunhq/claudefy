@@ -17,6 +17,7 @@ export interface InitOptions {
   backend?: string;
   quiet: boolean;
   skipEncryption?: boolean;
+  skipSecretScan?: boolean;
   passphrase?: string;
   installHooks?: boolean;
   createRepo?: boolean;
@@ -91,6 +92,7 @@ export class InitCommand {
     await pushCommand.execute({
       quiet: options.quiet,
       skipEncryption,
+      skipSecretScan: options.skipSecretScan,
       passphrase,
     });
 

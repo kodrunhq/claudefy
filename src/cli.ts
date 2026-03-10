@@ -69,6 +69,7 @@ program
         backend: options.backend,
         quiet: global.quiet,
         skipEncryption: global.skipEncryption,
+        skipSecretScan: global.skipSecretScan,
         passphrase: global.passphrase,
         installHooks: options.hooks ?? false,
         createRepo: options.createRepo ?? false,
