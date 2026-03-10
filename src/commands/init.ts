@@ -1,8 +1,16 @@
 import { join } from "node:path";
+import { writeFile } from "node:fs/promises";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PushCommand } from "./push.js";
 import { HookManager } from "../hook-manager/hook-manager.js";
+import { output } from "../output.js";
+
+const LFS_GITATTRIBUTES = [
+  "projects/**/*.jsonl filter=lfs diff=lfs merge=lfs -text",
+  "projects/**/*.jsonl.age filter=lfs diff=lfs merge=lfs -text",
+  "",
+].join("\n");
 
 export interface InitOptions {
   backend: string;
@@ -30,14 +38,20 @@ export class InitCommand {
     const config = await configManager.initialize(options.backend);
 
     if (!options.quiet) {
-      console.log(`Initialized claudefy with machine ID: ${config.machineId}`);
+      output.info(`Initialized claudefy with machine ID: ${config.machineId}`);
     }
 
     // 2. Initialize git store
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(options.backend);
 
-    // 3. Run initial push
+    // 3. Write .gitattributes for LFS tracking of large session files
+    await writeFile(
+      join(gitAdapter.getStorePath(), ".gitattributes"),
+      LFS_GITATTRIBUTES
+    );
+
+    // 4. Run initial push
     const pushCommand = new PushCommand(this.homeDir);
     await pushCommand.execute({
       quiet: options.quiet,
@@ -45,17 +59,17 @@ export class InitCommand {
       passphrase: options.passphrase,
     });
 
-    // 4. Install hooks if requested
+    // 5. Install hooks if requested
     if (options.installHooks) {
       const hookManager = new HookManager(join(this.homeDir, ".claude", "settings.json"));
       await hookManager.install();
       if (!options.quiet) {
-        console.log("Auto-sync hooks installed.");
+        output.info("Auto-sync hooks installed.");
       }
     }
 
     if (!options.quiet) {
-      console.log("Setup complete. Your Claude config is now synced.");
+      output.success("Setup complete. Your Claude config is now synced.");
     }
   }
 }

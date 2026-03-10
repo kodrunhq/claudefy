@@ -8,6 +8,7 @@ import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PathMapper } from "../path-mapper/path-mapper.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { Encryptor } from "../encryptor/encryptor.js";
+import { output } from "../output.js";
 
 export interface PushOptions {
   quiet: boolean;
@@ -40,7 +41,7 @@ export class PushCommand {
     const willEncrypt = config.encryption.enabled && !options.skipEncryption;
     if (!options.quiet) {
       const unknownLabel = willEncrypt ? "unknown (encrypted)" : "unknown";
-      console.log(
+      output.info(
         `Syncing: ${classification.allowlist.length} allowed, ` +
         `${classification.unknown.length} ${unknownLabel}, ` +
         `${classification.denylist.length} denied`
@@ -167,7 +168,7 @@ export class PushCommand {
     await gitAdapter.commitAndPush(`sync: push from ${config.machineId}`);
 
     if (!options.quiet) {
-      console.log("Push complete.");
+      output.success("Push complete.");
     }
   }
 
