@@ -32,7 +32,8 @@ program
 program
   .command("init")
   .description("Initialize claudefy store on first machine")
-  .requiredOption("--backend <url>", "Git remote URL for store")
+  .option("--backend <url>", "Git remote URL for store")
+  .option("--create-repo", "Auto-create a GitHub/GitLab repo")
   .option("--hooks", "Install auto-sync hooks")
   .action(async function (this: Command, options) {
     try {
@@ -45,6 +46,7 @@ program
         skipEncryption: global.skipEncryption,
         passphrase: global.passphrase,
         installHooks: options.hooks ?? false,
+        createRepo: options.createRepo ?? false,
       });
     } catch (err: any) {
       output.error(err.message);
@@ -201,6 +203,65 @@ program
       const cmd = new MachinesCommand(homeDir);
       const machines = await cmd.execute();
       console.log(JSON.stringify(machines, null, 2));
+    } catch (err: any) {
+      output.error(err.message);
+      process.exit(1);
+    }
+  });
+
+const configCmd = program.command("config").description("Manage claudefy configuration");
+
+configCmd
+  .command("get [key]")
+  .description("Show full config or a specific key")
+  .action(async (key?: string) => {
+    try {
+      const { ConfigCommand } = await import("./commands/config.js");
+      const cmd = new ConfigCommand(homeDir);
+      const result = await cmd.get(key);
+      console.log(typeof result === "object" ? JSON.stringify(result, null, 2) : String(result));
+    } catch (err: any) {
+      output.error(err.message);
+      process.exit(1);
+    }
+  });
+
+configCmd
+  .command("set <key> <value>")
+  .description("Update a config value")
+  .action(async (key: string, value: string) => {
+    try {
+      const { ConfigCommand } = await import("./commands/config.js");
+      const cmd = new ConfigCommand(homeDir);
+      await cmd.set(key, value);
+      output.success(`Set ${key}`);
+    } catch (err: any) {
+      output.error(err.message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("doctor")
+  .description("Diagnose sync health")
+  .action(async () => {
+    try {
+      const { DoctorCommand } = await import("./commands/doctor.js");
+      const cmd = new DoctorCommand(homeDir);
+      const checks = await cmd.execute();
+      for (const check of checks) {
+        if (check.status === "pass") {
+          output.success(`${check.name}: ${check.detail}`);
+        } else if (check.status === "warn") {
+          output.warn(`${check.name}: ${check.detail}`);
+        } else {
+          output.error(`${check.name}: ${check.detail}`);
+        }
+      }
+      const failures = checks.filter((c) => c.status === "fail");
+      if (failures.length > 0) {
+        process.exit(1);
+      }
     } catch (err: any) {
       output.error(err.message);
       process.exit(1);

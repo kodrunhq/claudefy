@@ -49,6 +49,14 @@
     "deepmerge": "^4.3.1",
     "simple-git": "^3.32.3"
   },
+  "peerDependencies": {
+    "keytar": ">=7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "keytar": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.4.0",

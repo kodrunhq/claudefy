@@ -13,11 +13,12 @@ const LFS_GITATTRIBUTES = [
 ].join("\n");
 
 export interface InitOptions {
-  backend: string;
+  backend?: string;
   quiet: boolean;
   skipEncryption?: boolean;
   passphrase?: string;
   installHooks?: boolean;
+  createRepo?: boolean;
 }
 
 export class InitCommand {
@@ -28,6 +29,22 @@ export class InitCommand {
   }
 
   async execute(options: InitOptions): Promise<void> {
+    let backend = options.backend;
+
+    if (!backend && options.createRepo) {
+      const { RepoCreator } = await import("../repo-creator/repo-creator.js");
+      const creator = new RepoCreator();
+      const repoName = "claude-sync";
+      backend = await creator.create(repoName);
+      if (!options.quiet) {
+        output.info(`Created remote repository: ${backend}`);
+      }
+    }
+
+    if (!backend) {
+      throw new Error("Either --backend <url> or --create-repo is required.");
+    }
+
     const configManager = new ConfigManager(this.homeDir);
 
     if (configManager.isInitialized()) {
@@ -35,7 +52,7 @@ export class InitCommand {
     }
 
     // 1. Initialize config
-    const config = await configManager.initialize(options.backend);
+    const config = await configManager.initialize(backend);
 
     if (!options.quiet) {
       output.info(`Initialized claudefy with machine ID: ${config.machineId}`);
@@ -43,7 +60,7 @@ export class InitCommand {
 
     // 2. Initialize git store
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
-    await gitAdapter.initStore(options.backend);
+    await gitAdapter.initStore(backend);
 
     // 3. Write .gitattributes for LFS tracking of large session files
     await writeFile(join(gitAdapter.getStorePath(), ".gitattributes"), LFS_GITATTRIBUTES);
