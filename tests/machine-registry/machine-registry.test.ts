@@ -41,6 +41,36 @@ describe("MachineRegistry", () => {
     expect(after).not.toBe(before);
   });
 
+  it("conditionalRegister skips update when shouldUpdate is false", async () => {
+    const registry = new MachineRegistry(manifestPath);
+    await registry.register("m1", "host1", "linux");
+    const before = (await registry.list())[0].lastSync;
+
+    await new Promise((r) => setTimeout(r, 10));
+    await registry.conditionalRegister("m1", "host1", "linux", false);
+    const after = (await registry.list())[0].lastSync;
+    expect(after).toBe(before);
+  });
+
+  it("conditionalRegister updates when shouldUpdate is true", async () => {
+    const registry = new MachineRegistry(manifestPath);
+    await registry.register("m1", "host1", "linux");
+    const before = (await registry.list())[0].lastSync;
+
+    await new Promise((r) => setTimeout(r, 10));
+    await registry.conditionalRegister("m1", "host1", "linux", true);
+    const after = (await registry.list())[0].lastSync;
+    expect(after).not.toBe(before);
+  });
+
+  it("conditionalRegister always registers new machines", async () => {
+    const registry = new MachineRegistry(manifestPath);
+    await registry.conditionalRegister("new-machine", "host", "linux", false);
+    const machines = await registry.list();
+    expect(machines).toHaveLength(1);
+    expect(machines[0].machineId).toBe("new-machine");
+  });
+
   it("handles multiple machines", async () => {
     const registry = new MachineRegistry(manifestPath);
     await registry.register("nuc-i7-abc123", "nuc-i7", "linux");

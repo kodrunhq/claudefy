@@ -21,7 +21,7 @@ describe("OverrideCommand", () => {
 
     // Create bare remote
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-override-remote-"));
-    await simpleGit(remoteDir).init(true);
+    await simpleGit(remoteDir).init(true, ["-b", "main"]);
 
     // Create ~/.claude with test content
     await mkdir(join(claudeDir, "commands"), { recursive: true });

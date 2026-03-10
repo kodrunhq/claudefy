@@ -12,7 +12,7 @@ describe("GitAdapter", () => {
   beforeEach(async () => {
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-remote-"));
     const bareGit = simpleGit(remoteDir);
-    await bareGit.init(true);
+    await bareGit.init(true, ["-b", "main"]);
 
     localDir = await mkdtemp(join(tmpdir(), "claudefy-local-"));
   });
@@ -88,6 +88,114 @@ describe("GitAdapter", () => {
     await rm(otherDir, { recursive: true, force: true });
   });
 
+  it("ensureMachineBranch creates and switches to machine branch", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    await adapter.ensureMachineBranch("laptop-1");
+    const branch = await adapter.getCurrentBranch();
+    expect(branch).toBe("machines/laptop-1");
+  });
+
+  it("ensureMachineBranch checks out existing local branch", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    await adapter.ensureMachineBranch("laptop-1");
+    // Switch away
+    const storeGit = simpleGit(adapter.getStorePath());
+    await storeGit.checkout("main");
+    expect(await adapter.getCurrentBranch()).toBe("main");
+
+    // Should checkout existing branch, not create new
+    await adapter.ensureMachineBranch("laptop-1");
+    expect(await adapter.getCurrentBranch()).toBe("machines/laptop-1");
+  });
+
+  it("getCurrentBranch returns correct branch name", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    expect(await adapter.getCurrentBranch()).toBe("main");
+
+    await adapter.ensureMachineBranch("test-machine");
+    expect(await adapter.getCurrentBranch()).toBe("machines/test-machine");
+  });
+
+  it("commitAndPush with machineId commits to machine branch AND merges to main", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+    await adapter.ensureMachineBranch("dev-box");
+
+    const storePath = adapter.getStorePath();
+    await writeFile(join(storePath, "feature.txt"), "new feature");
+
+    const result = await adapter.commitAndPush("feat: add feature", "dev-box");
+
+    expect(result.committed).toBe(true);
+    expect(result.pushed).toBe(true);
+    expect(result.mergedToMain).toBe(true);
+
+    // Should be back on machine branch
+    expect(await adapter.getCurrentBranch()).toBe("machines/dev-box");
+
+    // Verify main has the file too
+    const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir).clone(remoteDir, "store", ["-b", "main"]);
+    const content = await readFile(join(verifyDir, "store", "feature.txt"), "utf-8");
+    expect(content).toBe("new feature");
+    await rm(verifyDir, { recursive: true, force: true });
+  });
+
+  it("commitAndPush returns committed=false when store is clean", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    const result = await adapter.commitAndPush("nothing changed");
+    expect(result.committed).toBe(false);
+    expect(result.pushed).toBe(false);
+    expect(result.mergedToMain).toBe(false);
+  });
+
+  it("commitAndPush without machineId behaves like legacy mode", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    const storePath = adapter.getStorePath();
+    await writeFile(join(storePath, "data.txt"), "some data");
+
+    const result = await adapter.commitAndPush("add data");
+    expect(result.committed).toBe(true);
+    expect(result.pushed).toBe(true);
+    expect(result.mergedToMain).toBe(false);
+  });
+
+  it("pullAndMergeMain merges main changes into machine branch", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    // Create machine branch and push something
+    await adapter.ensureMachineBranch("machine-a");
+    await writeFile(join(adapter.getStorePath(), "machine-file.txt"), "from machine");
+    await adapter.commitAndPush("machine commit", "machine-a");
+
+    // Simulate another machine pushing to main via a separate clone
+    const otherDir = await mkdtemp(join(tmpdir(), "claudefy-other-"));
+    const otherGit = simpleGit(otherDir);
+    await otherGit.clone(remoteDir, "store");
+    await writeFile(join(otherDir, "store", "main-file.txt"), "from main");
+    await simpleGit(join(otherDir, "store")).add(".").commit("main commit").push();
+
+    // Now pullAndMergeMain should bring that change into machine branch
+    await adapter.pullAndMergeMain();
+
+    expect(await adapter.getCurrentBranch()).toBe("machines/machine-a");
+    const content = await readFile(join(adapter.getStorePath(), "main-file.txt"), "utf-8");
+    expect(content).toBe("from main");
+
+    await rm(otherDir, { recursive: true, force: true });
+  });
+
   it("force pushes on override", async () => {
     const adapter = new GitAdapter(localDir);
     await adapter.initStore(remoteDir);
@@ -102,6 +210,34 @@ describe("GitAdapter", () => {
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const override = await readFile(join(verifyDir, "store", ".override"), "utf-8");
     expect(JSON.parse(override).machine).toBe("override-machine");
+    await rm(verifyDir, { recursive: true, force: true });
+  });
+
+  it("wipeAndPush on machine branch force-updates main to match", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    // Add some data on main first
+    const storePath = adapter.getStorePath();
+    await writeFile(join(storePath, "old-data.txt"), "should be wiped");
+    await adapter.commitAndPush("add old data");
+
+    // Switch to machine branch and wipe
+    await adapter.ensureMachineBranch("wipe-machine");
+    await adapter.wipeAndPush("wipe-machine");
+
+    // Verify main was force-updated — old-data.txt should be gone, .override should exist
+    const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir).clone(remoteDir, "store", ["-b", "main"]);
+    const override = await readFile(join(verifyDir, "store", ".override"), "utf-8");
+    expect(JSON.parse(override).machine).toBe("wipe-machine");
+
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(join(verifyDir, "store", "old-data.txt"))).toBe(false);
+
+    // Should be back on machine branch
+    expect(await adapter.getCurrentBranch()).toBe("machines/wipe-machine");
+
     await rm(verifyDir, { recursive: true, force: true });
   });
 });

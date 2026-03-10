@@ -83,6 +83,7 @@ export class InitCommand {
     // 2. Initialize git store
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(backend);
+    await gitAdapter.ensureMachineBranch(config.machineId);
 
     // 3. Write .gitattributes for LFS tracking of large session files
     await writeFile(join(gitAdapter.getStorePath(), ".gitattributes"), LFS_GITATTRIBUTES);

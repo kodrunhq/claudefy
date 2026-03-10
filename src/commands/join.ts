@@ -39,19 +39,28 @@ export class JoinCommand {
     // 2. Initialize git store and pull
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(options.backend);
+    await gitAdapter.ensureMachineBranch(config.machineId);
 
-    // 3. Register this machine and commit
-    const registry = new MachineRegistry(join(gitAdapter.getStorePath(), "manifest.json"));
-    await registry.register(config.machineId, hostname(), platform());
-    await gitAdapter.commitAndPush(`sync: ${config.machineId} joined`);
-
-    // 4. Run pull to get remote config
+    // 3. Run pull to get remote config
     const pullCommand = new PullCommand(this.homeDir);
     await pullCommand.execute({
       quiet: options.quiet,
       skipEncryption: options.skipEncryption,
       passphrase: options.passphrase,
     });
+
+    // 4. Register this machine and commit
+    const registry = new MachineRegistry(join(gitAdapter.getStorePath(), "manifest.json"));
+    await registry.register(config.machineId, hostname(), platform());
+    const commitResult = await gitAdapter.commitAndPush(
+      `sync: ${config.machineId} joined`,
+      config.machineId,
+    );
+    if (!commitResult.pushed && !options.quiet) {
+      output.warn(
+        "Machine registry update could not be pushed to the remote. Check your connection and try 'claudefy push'.",
+      );
+    }
 
     // 5. Install hooks if requested
     if (options.installHooks) {
