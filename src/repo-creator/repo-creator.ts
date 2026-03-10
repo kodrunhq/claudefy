@@ -32,7 +32,7 @@ export class RepoCreator {
       const { stdout } = await execFileAsync("glab", [
         "project", "create", "--name", name, "--visibility", "private",
       ]);
-      const urlMatch = stdout.match(/https?:\/\/\S+\.git/);
+      const urlMatch = stdout.match(/https?:\/\/\S+/);
       if (!urlMatch) throw new Error("Failed to parse repo URL from glab output");
       return urlMatch[0];
     }

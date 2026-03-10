@@ -148,11 +148,11 @@ program
 program
   .command("link <alias> <path>")
   .description("Map local path to canonical project ID")
-  .action(async (_alias, _path) => {
+  .action(async (alias, localPath) => {
     try {
       const { LinkCommand } = await import("./commands/link.js");
       const cmd = new LinkCommand(homeDir);
-      await cmd.add(_alias, _path);
+      await cmd.add(alias, localPath);
     } catch (err: any) {
       console.error(err.message);
       process.exit(1);
