@@ -23,7 +23,7 @@ program
   .version("0.1.0")
   .option("-q, --quiet", "Suppress output")
   .option("--skip-encryption", "Skip encryption")
-  .option("--passphrase <passphrase>", "Encryption passphrase");
+  .option("--passphrase <passphrase>", "Encryption passphrase (prefer CLAUDEFY_PASSPHRASE env var to avoid process list exposure)");
 
 program
   .command("init")

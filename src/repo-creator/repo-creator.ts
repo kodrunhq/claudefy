@@ -20,7 +20,7 @@ export class RepoCreator {
 
     if (detected === "github") {
       const { stdout } = await execFileAsync("gh", [
-        "repo", "create", name, "--private", "--confirm",
+        "repo", "create", name, "--private", "--yes",
       ]);
       // gh repo create outputs the URL
       const url = stdout.trim().split("\n").pop()?.trim();
@@ -42,7 +42,8 @@ export class RepoCreator {
 
   private async isAvailable(cmd: string): Promise<boolean> {
     try {
-      await execFileAsync("which", [cmd]);
+      const whichCmd = process.platform === "win32" ? "where" : "which";
+      await execFileAsync(whichCmd, [cmd]);
       return true;
     } catch {
       return false;

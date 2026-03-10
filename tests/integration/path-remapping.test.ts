@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
-import { existsSync } from "node:fs";
 
 import { InitCommand } from "../../src/commands/init.js";
 import { JoinCommand } from "../../src/commands/join.js";
@@ -68,9 +67,8 @@ describe("Path Remapping Integration", () => {
     const settingsB = JSON.parse(
       await readFile(join(claudeDirB, "settings.json"), "utf-8"),
     );
-    if (settingsB.mcpServers?.test?.command) {
-      expect(settingsB.mcpServers.test.command).toContain(claudeDirB);
-      expect(settingsB.mcpServers.test.command).not.toContain(claudeDirA);
-    }
+    expect(settingsB.mcpServers?.test?.command).toBeDefined();
+    expect(settingsB.mcpServers!.test!.command!).toContain(claudeDirB);
+    expect(settingsB.mcpServers!.test!.command!).not.toContain(claudeDirA);
   });
 });
