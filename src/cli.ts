@@ -24,7 +24,10 @@ program
   .version("0.1.0")
   .option("-q, --quiet", "Suppress output")
   .option("--skip-encryption", "Skip encryption")
-  .option("--passphrase <passphrase>", "Encryption passphrase (prefer CLAUDEFY_PASSPHRASE env var to avoid process list exposure)");
+  .option(
+    "--passphrase <passphrase>",
+    "Encryption passphrase (prefer CLAUDEFY_PASSPHRASE env var to avoid process list exposure)",
+  );
 
 program
   .command("init")
@@ -204,9 +207,7 @@ program
     }
   });
 
-const hooksCmd = program
-  .command("hooks")
-  .description("Manage auto-sync hooks");
+const hooksCmd = program.command("hooks").description("Manage auto-sync hooks");
 
 hooksCmd
   .command("install")

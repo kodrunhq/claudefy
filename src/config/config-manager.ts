@@ -78,7 +78,7 @@ export class ConfigManager {
   async addLink(
     alias: string,
     localPath: string,
-    meta: { canonicalId: string; gitRemote: string | null }
+    meta: { canonicalId: string; gitRemote: string | null },
   ): Promise<void> {
     const links = await this.getLinks();
     links[alias] = {
@@ -131,23 +131,14 @@ export class ConfigManager {
   }
 
   private async saveConfig(config: ClaudefyConfig): Promise<void> {
-    await writeFile(
-      join(this.configDir, CONFIG_FILE),
-      JSON.stringify(config, null, 2)
-    );
+    await writeFile(join(this.configDir, CONFIG_FILE), JSON.stringify(config, null, 2));
   }
 
   private async saveLinks(links: LinksConfig): Promise<void> {
-    await writeFile(
-      join(this.configDir, LINKS_FILE),
-      JSON.stringify(links, null, 2)
-    );
+    await writeFile(join(this.configDir, LINKS_FILE), JSON.stringify(links, null, 2));
   }
 
   private async saveSyncFilter(filter: SyncFilterConfig): Promise<void> {
-    await writeFile(
-      join(this.configDir, SYNC_FILTER_FILE),
-      JSON.stringify(filter, null, 2)
-    );
+    await writeFile(join(this.configDir, SYNC_FILTER_FILE), JSON.stringify(filter, null, 2));
   }
 }

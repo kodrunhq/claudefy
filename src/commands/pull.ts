@@ -76,7 +76,9 @@ export class PullCommand {
 
     // 3. Decrypt .age files if encryption is enabled
     if (config.encryption.enabled && !options.skipEncryption && !options.passphrase) {
-      throw new Error("Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.");
+      throw new Error(
+        "Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.",
+      );
     }
     if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
       const encryptor = new Encryptor(options.passphrase);
@@ -130,11 +132,12 @@ export class PullCommand {
     const historyPath = join(configDir, "history.jsonl");
     if (existsSync(historyPath)) {
       const content = await readFile(historyPath, "utf-8");
-      const remapped = content
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => pathMapper.remapJsonlLine(line))
-        .join("\n") + "\n";
+      const remapped =
+        content
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => pathMapper.remapJsonlLine(line))
+          .join("\n") + "\n";
       await writeFile(historyPath, remapped);
     }
 

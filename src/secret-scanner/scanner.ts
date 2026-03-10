@@ -15,7 +15,10 @@ const SECRET_PATTERNS: { name: string; regex: RegExp }[] = [
   { name: "GitHub OAuth", regex: /gho_[A-Za-z0-9]{36}/ },
   { name: "GitLab Token", regex: /glpat-[A-Za-z0-9\-_]{20,}/ },
   { name: "Generic Bearer", regex: /Bearer\s+[a-zA-Z0-9_\-.]{20,}/ },
-  { name: "Generic Secret Key", regex: /"(?:secret|password|token|apiKey|api_key|private_key)"\s*:\s*"[^"]{8,}"/ },
+  {
+    name: "Generic Secret Key",
+    regex: /"(?:secret|password|token|apiKey|api_key|private_key)"\s*:\s*"[^"]{8,}"/,
+  },
   { name: "High Entropy Base64", regex: /[A-Za-z0-9+/]{40,}={0,2}/ },
 ];
 
@@ -31,9 +34,8 @@ export class SecretScanner {
         if (match) {
           // Redact matched secret, showing only prefix and suffix
           const matched = match[0];
-          const redacted = matched.length > 8
-            ? matched.slice(0, 4) + "****" + matched.slice(-4)
-            : "****";
+          const redacted =
+            matched.length > 8 ? matched.slice(0, 4) + "****" + matched.slice(-4) : "****";
           findings.push({
             file: filePath,
             line: i + 1,

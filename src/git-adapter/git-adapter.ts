@@ -33,7 +33,7 @@ export class GitAdapter {
         .catch(() => "");
       if (refs.trim()) {
         throw new Error(
-          `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`
+          `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`,
         );
       }
       await mkdir(this.storePath, { recursive: true });
@@ -69,10 +69,7 @@ export class GitAdapter {
       machine: machineId,
       timestamp: new Date().toISOString(),
     };
-    await writeFile(
-      join(this.storePath, ".override"),
-      JSON.stringify(marker, null, 2)
-    );
+    await writeFile(join(this.storePath, ".override"), JSON.stringify(marker, null, 2));
   }
 
   async checkOverrideMarker(): Promise<OverrideMarker | null> {

@@ -28,12 +28,12 @@ describe("HookManager", () => {
     expect(settings.hooks.SessionEnd).toBeDefined();
 
     const startCmd = settings.hooks.SessionStart.find((h: any) =>
-      h.hooks.some((hk: any) => hk.command.includes("claudefy pull"))
+      h.hooks.some((hk: any) => hk.command.includes("claudefy pull")),
     );
     expect(startCmd).toBeDefined();
 
     const endCmd = settings.hooks.SessionEnd.find((h: any) =>
-      h.hooks.some((hk: any) => hk.command.includes("claudefy push"))
+      h.hooks.some((hk: any) => hk.command.includes("claudefy push")),
     );
     expect(endCmd).toBeDefined();
   });
@@ -41,9 +41,7 @@ describe("HookManager", () => {
   it("installs hooks alongside existing hooks", async () => {
     const existing = {
       hooks: {
-        SessionStart: [
-          { hooks: [{ type: "command", command: "echo existing" }] },
-        ],
+        SessionStart: [{ hooks: [{ type: "command", command: "echo existing" }] }],
       },
     };
     await writeFile(settingsPath, JSON.stringify(existing));
@@ -62,9 +60,7 @@ describe("HookManager", () => {
           { hooks: [{ type: "command", command: "echo existing" }] },
           { hooks: [{ type: "command", command: "claudefy pull --quiet" }] },
         ],
-        SessionEnd: [
-          { hooks: [{ type: "command", command: "claudefy push --quiet" }] },
-        ],
+        SessionEnd: [{ hooks: [{ type: "command", command: "claudefy push --quiet" }] }],
       },
     };
     await writeFile(settingsPath, JSON.stringify(withHooks));

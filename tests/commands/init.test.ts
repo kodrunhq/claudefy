@@ -46,13 +46,19 @@ describe("InitCommand", () => {
     const cmd = new InitCommand(homeDir);
     await cmd.execute({ backend: remoteDir, quiet: true, skipEncryption: true });
 
-    await expect(cmd.execute({ backend: remoteDir, quiet: true, skipEncryption: true }))
-      .rejects.toThrow(/already initialized/);
+    await expect(
+      cmd.execute({ backend: remoteDir, quiet: true, skipEncryption: true }),
+    ).rejects.toThrow(/already initialized/);
   });
 
   it("installs hooks when requested", async () => {
     const cmd = new InitCommand(homeDir);
-    await cmd.execute({ backend: remoteDir, quiet: true, skipEncryption: true, installHooks: true });
+    await cmd.execute({
+      backend: remoteDir,
+      quiet: true,
+      skipEncryption: true,
+      installHooks: true,
+    });
 
     const settings = JSON.parse(await readFile(join(claudeDir, "settings.json"), "utf-8"));
     expect(settings.hooks).toBeDefined();

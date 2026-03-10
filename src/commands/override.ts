@@ -22,7 +22,9 @@ export class OverrideCommand {
 
   async execute(options: OverrideOptions): Promise<void> {
     if (!options.confirm) {
-      throw new Error("Override requires --confirm flag. This will wipe the remote store and replace it with your local config.");
+      throw new Error(
+        "Override requires --confirm flag. This will wipe the remote store and replace it with your local config.",
+      );
     }
 
     const config = await this.configManager.load();
@@ -52,7 +54,9 @@ export class OverrideCommand {
     });
 
     if (!options.quiet) {
-      output.success("Override complete. All other machines will receive your config on next pull.");
+      output.success(
+        "Override complete. All other machines will receive your config on next pull.",
+      );
     }
   }
 }

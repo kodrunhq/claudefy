@@ -26,18 +26,12 @@ describe("Full Sync Cycle", () => {
     const claudeDirA = join(homeDirA, ".claude");
     await mkdir(join(claudeDirA, "commands"), { recursive: true });
     await writeFile(join(claudeDirA, "commands", "test.md"), "# Test Command");
-    await writeFile(
-      join(claudeDirA, "settings.json"),
-      JSON.stringify({ theme: "dark" }),
-    );
+    await writeFile(join(claudeDirA, "settings.json"), JSON.stringify({ theme: "dark" }));
 
     // Create Machine B's ~/.claude (minimal)
     const claudeDirB = join(homeDirB, ".claude");
     await mkdir(claudeDirB, { recursive: true });
-    await writeFile(
-      join(claudeDirB, "settings.json"),
-      JSON.stringify({ theme: "light" }),
-    );
+    await writeFile(join(claudeDirB, "settings.json"), JSON.stringify({ theme: "light" }));
   });
 
   afterEach(async () => {
@@ -66,10 +60,7 @@ describe("Full Sync Cycle", () => {
     // Verify Machine B got Machine A's commands
     const claudeDirB = join(homeDirB, ".claude");
     expect(existsSync(join(claudeDirB, "commands", "test.md"))).toBe(true);
-    const testMd = await readFile(
-      join(claudeDirB, "commands", "test.md"),
-      "utf-8",
-    );
+    const testMd = await readFile(join(claudeDirB, "commands", "test.md"), "utf-8");
     expect(testMd).toBe("# Test Command");
 
     // 3. Machine B: modify content → push
@@ -83,10 +74,7 @@ describe("Full Sync Cycle", () => {
 
     const claudeDirA = join(homeDirA, ".claude");
     expect(existsSync(join(claudeDirA, "commands", "new-cmd.md"))).toBe(true);
-    const newCmd = await readFile(
-      join(claudeDirA, "commands", "new-cmd.md"),
-      "utf-8",
-    );
+    const newCmd = await readFile(join(claudeDirA, "commands", "new-cmd.md"), "utf-8");
     expect(newCmd).toBe("# New Command");
   });
 
@@ -109,10 +97,7 @@ describe("Full Sync Cycle", () => {
 
     // 3. Machine A: modify settings and override
     const claudeDirA = join(homeDirA, ".claude");
-    await writeFile(
-      join(claudeDirA, "settings.json"),
-      JSON.stringify({ theme: "override-theme" }),
-    );
+    await writeFile(join(claudeDirA, "settings.json"), JSON.stringify({ theme: "override-theme" }));
     const overrideCmd = new OverrideCommand(homeDirA);
     await overrideCmd.execute({
       quiet: true,
@@ -129,9 +114,7 @@ describe("Full Sync Cycle", () => {
 
     // Verify Machine B got the override content
     const claudeDirB = join(homeDirB, ".claude");
-    const settings = JSON.parse(
-      await readFile(join(claudeDirB, "settings.json"), "utf-8"),
-    );
+    const settings = JSON.parse(await readFile(join(claudeDirB, "settings.json"), "utf-8"));
     expect(settings.theme).toBe("override-theme");
   });
 });

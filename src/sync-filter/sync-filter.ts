@@ -1,11 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { SyncFilterConfig } from "../config/types.js";
-import type {
-  SyncTier,
-  ClassifiedItem,
-  ClassificationResult,
-} from "./types.js";
+import type { SyncTier, ClassifiedItem, ClassificationResult } from "./types.js";
 
 export class SyncFilter {
   private config: SyncFilterConfig;

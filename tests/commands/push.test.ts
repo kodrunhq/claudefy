@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PushCommand } from "../../src/commands/push.js";
-import {
-  mkdtemp, rm, mkdir, writeFile, readFile, readdir,
-} from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -49,7 +47,7 @@ describe("PushCommand", () => {
         sync: { lfsThreshold: 512 * 1024 },
         filter: {},
         machineId: "test-machine-abc",
-      })
+      }),
     );
     await writeFile(join(claudefyDir, "links.json"), "{}");
     await writeFile(
@@ -57,7 +55,7 @@ describe("PushCommand", () => {
       JSON.stringify({
         allowlist: ["commands", "agents", "settings.json"],
         denylist: ["cache"],
-      })
+      }),
     );
   });
 
@@ -75,16 +73,10 @@ describe("PushCommand", () => {
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const storePath = join(verifyDir, "store");
 
-    const command = await readFile(
-      join(storePath, "config", "commands", "test.md"),
-      "utf-8"
-    );
+    const command = await readFile(join(storePath, "config", "commands", "test.md"), "utf-8");
     expect(command).toBe("# Test Command");
 
-    const agent = await readFile(
-      join(storePath, "config", "agents", "my-agent.md"),
-      "utf-8"
-    );
+    const agent = await readFile(join(storePath, "config", "agents", "my-agent.md"), "utf-8");
     expect(agent).toBe("# Agent");
 
     await rm(verifyDir, { recursive: true, force: true });
@@ -112,10 +104,7 @@ describe("PushCommand", () => {
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const storePath = join(verifyDir, "store");
 
-    const version = await readFile(
-      join(storePath, "unknown", "get-shit-done", "VERSION"),
-      "utf-8"
-    );
+    const version = await readFile(join(storePath, "unknown", "get-shit-done", "VERSION"), "utf-8");
     expect(version).toBe("1.0.0");
 
     await rm(verifyDir, { recursive: true, force: true });
@@ -126,14 +115,18 @@ describe("PushCommand", () => {
       join(claudeDir, "settings.json"),
       JSON.stringify({
         hooks: {
-          SessionStart: [{
-            hooks: [{
-              type: "command",
-              command: `node "${claudeDir}/hooks/my-hook.js"`,
-            }],
-          }],
+          SessionStart: [
+            {
+              hooks: [
+                {
+                  type: "command",
+                  command: `node "${claudeDir}/hooks/my-hook.js"`,
+                },
+              ],
+            },
+          ],
         },
-      })
+      }),
     );
 
     const push = new PushCommand(homeDir);
@@ -142,7 +135,7 @@ describe("PushCommand", () => {
     const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const settings = JSON.parse(
-      await readFile(join(verifyDir, "store", "config", "settings.json"), "utf-8")
+      await readFile(join(verifyDir, "store", "config", "settings.json"), "utf-8"),
     );
     expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("@@CLAUDE_DIR@@");
     expect(settings.hooks.SessionStart[0].hooks[0].command).not.toContain(claudeDir);
@@ -158,9 +151,7 @@ describe("PushCommand", () => {
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const storePath = join(verifyDir, "store");
 
-    const manifest = JSON.parse(
-      await readFile(join(storePath, "manifest.json"), "utf-8")
-    );
+    const manifest = JSON.parse(await readFile(join(storePath, "manifest.json"), "utf-8"));
     expect(manifest.machines).toHaveLength(1);
     expect(manifest.machines[0].machineId).toBe("test-machine-abc");
 
@@ -178,7 +169,7 @@ describe("PushCommand", () => {
         sync: { lfsThreshold: 512 * 1024 },
         filter: {},
         machineId: "test-machine-enc",
-      })
+      }),
     );
 
     const push = new PushCommand(homeDir);
@@ -197,9 +188,7 @@ describe("PushCommand", () => {
     expect(existsSync(join(storePath, "unknown", "get-shit-done", "VERSION"))).toBe(false);
 
     // Encrypted content should not be readable as plaintext
-    const encryptedContent = await readFile(
-      join(storePath, "config", "settings.json.age")
-    );
+    const encryptedContent = await readFile(join(storePath, "config", "settings.json.age"));
     expect(encryptedContent.toString()).not.toContain('"key"');
 
     await rm(verifyDir, { recursive: true, force: true });
