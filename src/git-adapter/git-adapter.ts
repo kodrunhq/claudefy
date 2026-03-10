@@ -16,6 +16,7 @@ export class GitAdapter {
   private baseDir: string;
   private storePath: string;
   private git: SimpleGit | null = null;
+  private ghAuthCache: boolean | null = null;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
@@ -44,8 +45,7 @@ export class GitAdapter {
       }
       await mkdir(this.storePath, { recursive: true });
       const git = simpleGit(this.storePath);
-      await git.init();
-      await git.branch(["-M", "main"]);
+      await git.init(["-b", "main"]);
       await git.addRemote("origin", remoteUrl);
       await this.configureCredentialHelper(git, remoteUrl);
       await writeFile(join(this.storePath, ".gitkeep"), "");
@@ -126,7 +126,7 @@ export class GitAdapter {
   }
 
   private async configureCredentialHelper(git: SimpleGit, remoteUrl: string): Promise<void> {
-    if (!remoteUrl.startsWith("https://github.com")) return;
+    if (!this.isGitHubHttps(remoteUrl)) return;
     if (!(await this.isGhAuthenticated())) return;
     try {
       await git.addConfig("credential.helper", "!gh auth git-credential");
@@ -136,7 +136,7 @@ export class GitAdapter {
   }
 
   private async gitWithCredentials(baseDir: string, remoteUrl: string): Promise<SimpleGit> {
-    if (remoteUrl.startsWith("https://github.com") && (await this.isGhAuthenticated())) {
+    if (this.isGitHubHttps(remoteUrl) && (await this.isGhAuthenticated())) {
       return simpleGit(baseDir, {
         config: ["credential.helper=!gh auth git-credential"],
       });
@@ -144,12 +144,22 @@ export class GitAdapter {
     return simpleGit(baseDir);
   }
 
-  private async isGhAuthenticated(): Promise<boolean> {
+  private isGitHubHttps(url: string): boolean {
     try {
-      await execFileAsync("gh", ["auth", "status"]);
-      return true;
+      return new URL(url).hostname === "github.com";
     } catch {
       return false;
     }
+  }
+
+  private async isGhAuthenticated(): Promise<boolean> {
+    if (this.ghAuthCache !== null) return this.ghAuthCache;
+    try {
+      await execFileAsync("gh", ["auth", "status"]);
+      this.ghAuthCache = true;
+    } catch {
+      this.ghAuthCache = false;
+    }
+    return this.ghAuthCache;
   }
 }
