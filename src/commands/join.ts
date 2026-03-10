@@ -5,6 +5,7 @@ import { PullCommand } from "./pull.js";
 import { HookManager } from "../hook-manager/hook-manager.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { hostname, platform } from "node:os";
+import { output } from "../output.js";
 
 export interface JoinOptions {
   backend: string;
@@ -32,7 +33,7 @@ export class JoinCommand {
     const config = await configManager.initialize(options.backend);
 
     if (!options.quiet) {
-      console.log(`Joined sync with machine ID: ${config.machineId}`);
+      output.info(`Joined sync with machine ID: ${config.machineId}`);
     }
 
     // 2. Initialize git store and pull
@@ -57,12 +58,12 @@ export class JoinCommand {
       const hookManager = new HookManager(join(this.homeDir, ".claude", "settings.json"));
       await hookManager.install();
       if (!options.quiet) {
-        console.log("Auto-sync hooks installed.");
+        output.info("Auto-sync hooks installed.");
       }
     }
 
     if (!options.quiet) {
-      console.log("Join complete. Your Claude config has been synced from remote.");
+      output.success("Join complete. Your Claude config has been synced from remote.");
     }
   }
 }

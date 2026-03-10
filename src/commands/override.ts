@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PushCommand } from "./push.js";
+import { output } from "../output.js";
 
 export interface OverrideOptions {
   quiet: boolean;
@@ -27,7 +28,7 @@ export class OverrideCommand {
     const config = await this.configManager.load();
 
     if (!options.quiet) {
-      console.log(`Overriding remote store as machine: ${config.machineId}`);
+      output.warn(`Overriding remote store as machine: ${config.machineId}`);
     }
 
     // 1. Initialize git adapter
@@ -51,7 +52,7 @@ export class OverrideCommand {
     });
 
     if (!options.quiet) {
-      console.log("Override complete. All other machines will receive your config on next pull.");
+      output.success("Override complete. All other machines will receive your config on next pull.");
     }
   }
 }

@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { homedir } from "node:os";
+import { output } from "./output.js";
 
 const program = new Command();
 const homeDir = homedir();
@@ -43,7 +44,7 @@ program
         installHooks: options.hooks ?? false,
       });
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -66,7 +67,7 @@ program
         installHooks: options.hooks ?? false,
       });
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -85,7 +86,7 @@ program
         passphrase: global.passphrase,
       });
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -104,7 +105,7 @@ program
         passphrase: global.passphrase,
       });
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -125,7 +126,7 @@ program
         confirm: options.confirm ?? false,
       });
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -140,7 +141,7 @@ program
       const result = await cmd.execute();
       console.log(JSON.stringify(result, null, 2));
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -154,7 +155,7 @@ program
       const cmd = new LinkCommand(homeDir);
       await cmd.add(alias, localPath);
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -168,7 +169,7 @@ program
       const cmd = new LinkCommand(homeDir);
       await cmd.remove(alias);
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -183,7 +184,7 @@ program
       const links = await cmd.list();
       console.log(JSON.stringify(links, null, 2));
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -198,7 +199,7 @@ program
       const machines = await cmd.execute();
       console.log(JSON.stringify(machines, null, 2));
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -216,7 +217,7 @@ hooksCmd
       const cmd = new HooksCommand(homeDir);
       await cmd.install();
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });
@@ -230,7 +231,7 @@ hooksCmd
       const cmd = new HooksCommand(homeDir);
       await cmd.remove();
     } catch (err: any) {
-      console.error(err.message);
+      output.error(err.message);
       process.exit(1);
     }
   });

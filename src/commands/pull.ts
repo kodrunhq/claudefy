@@ -8,6 +8,7 @@ import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { Encryptor } from "../encryptor/encryptor.js";
 import { Merger } from "../merger/merger.js";
 import { BackupManager } from "../backup-manager/backup-manager.js";
+import { output } from "../output.js";
 
 export interface PullOptions {
   quiet: boolean;
@@ -55,7 +56,7 @@ export class PullCommand {
     if (override) {
       result.overrideDetected = true;
       if (!options.quiet) {
-        console.log(`Override detected from machine: ${override.machine} at ${override.timestamp}`);
+        output.warn(`Override detected from machine: ${override.machine} at ${override.timestamp}`);
       }
 
       // Create backup before applying override (skip if .claude doesn't exist yet)
@@ -65,7 +66,7 @@ export class PullCommand {
       }
 
       if (!options.quiet && result.backupPath) {
-        console.log(`Backup created at: ${result.backupPath}`);
+        output.info(`Backup created at: ${result.backupPath}`);
       }
 
       // Remove override marker
@@ -197,7 +198,7 @@ export class PullCommand {
     await gitAdapter.commitAndPush(`sync: pull on ${config.machineId}`);
 
     if (!options.quiet) {
-      console.log(`Pull complete. ${result.filesUpdated} items updated.`);
+      output.success(`Pull complete. ${result.filesUpdated} items updated.`);
     }
 
     return result;
