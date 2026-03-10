@@ -101,7 +101,9 @@ export class HookManager {
         return JSON.parse(content);
       } catch (err) {
         if (err instanceof SyntaxError) {
-          throw new Error(`Invalid JSON in settings file "${this.settingsPath}": ${err.message}`);
+          throw new Error(`Invalid JSON in settings file "${this.settingsPath}": ${err.message}`, {
+            cause: err,
+          });
         }
         throw err;
       }

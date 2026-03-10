@@ -34,6 +34,7 @@ export class GitAdapter {
       if (refs.trim()) {
         throw new Error(
           `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`,
+          { cause: error },
         );
       }
       await mkdir(this.storePath, { recursive: true });
