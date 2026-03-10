@@ -31,12 +31,10 @@ jobs:
       - name: Smoke test
         run: |
           npm pack
-          TARBALL=$(ls claudefy-*.tgz)
+          TARBALL=$(ls kodrunhq-claudefy-*.tgz)
           npm install -g "./${TARBALL}"
           claudefy --version
           claudefy --help
 
       - name: Publish to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
