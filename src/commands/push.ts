@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
 import { ConfigManager } from "../config/config-manager.js";
@@ -138,8 +138,11 @@ export class PushCommand {
           const canonicalId = pathMapper.normalizeDirName(dirName);
           if (canonicalId) {
             const destPath = resolve(join(projectsDir, canonicalId));
-            if (!destPath.startsWith(resolve(projectsDir) + "/")) {
-              output.warn(`Skipping directory rename "${dirName}": path escapes projects directory`);
+            const rel = relative(resolve(projectsDir), destPath);
+            if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
+              output.warn(
+                `Skipping directory rename "${dirName}": path escapes projects directory`,
+              );
               continue;
             }
             await rename(join(projectsDir, dirName), destPath);
@@ -214,7 +217,7 @@ export class PushCommand {
       const fullPath = join(dirPath, entry.name);
       if (entry.isDirectory()) {
         results.push(...(await this.collectFiles(fullPath)));
-      } else {
+      } else if (!entry.isSymbolicLink()) {
         results.push(fullPath);
       }
     }

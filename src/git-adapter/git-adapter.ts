@@ -112,8 +112,13 @@ export class GitAdapter {
     await this.git!.commit(message);
     result.committed = true;
 
-    await this.git!.push(["-u", "origin", await this.getCurrentBranch()]);
-    result.pushed = true;
+    try {
+      await this.git!.push(["-u", "origin", await this.getCurrentBranch()]);
+      result.pushed = true;
+    } catch {
+      result.pushed = false;
+      return result;
+    }
 
     if (machineId) {
       const machineBranch = `machines/${machineId}`;
@@ -226,7 +231,10 @@ export class GitAdapter {
   private async ensureMainBranch(): Promise<void> {
     if (!this.git) return;
     // Check if repo has any commits (empty clone scenario)
-    const hasCommits = await this.git.revparse(["HEAD"]).then(() => true).catch(() => false);
+    const hasCommits = await this.git
+      .revparse(["HEAD"])
+      .then(() => true)
+      .catch(() => false);
     if (!hasCommits) {
       // Empty cloned repo — create initial commit on main branch
       // First, checkout -b main (we may be on master from clone default)

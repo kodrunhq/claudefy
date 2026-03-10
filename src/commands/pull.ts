@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -21,7 +21,6 @@ export interface PullResult {
   backupPath?: string;
   filesUpdated: number;
 }
-
 
 export class PullCommand {
   private homeDir: string;
@@ -99,7 +98,8 @@ export class PullCommand {
       const tmpConfigDir = join(tmpDir, "config");
       const tmpUnknownDir = join(tmpDir, "unknown");
       if (existsSync(storeConfigDir)) await cp(storeConfigDir, tmpConfigDir, { recursive: true });
-      if (existsSync(storeUnknownDir)) await cp(storeUnknownDir, tmpUnknownDir, { recursive: true });
+      if (existsSync(storeUnknownDir))
+        await cp(storeUnknownDir, tmpUnknownDir, { recursive: true });
 
       // 5. Decrypt any .age files in temp dir
       const encryptedFiles = await this.collectAgeFiles(tmpConfigDir, tmpUnknownDir);
@@ -168,7 +168,8 @@ export class PullCommand {
           if (localName) {
             const destPath = resolve(join(projectsDir, localName));
             // Path containment: ensure renamed dir stays within projects/
-            if (!destPath.startsWith(resolve(projectsDir) + "/")) {
+            const rel = relative(resolve(projectsDir), destPath);
+            if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
               console.warn(
                 `Skipping directory rename "${dirName}" -> "${localName}": path escapes projects directory`,
               );
@@ -219,7 +220,8 @@ export class PullCommand {
           const dest = resolve(join(this.claudeDir, entry.name));
 
           // Path containment: ensure destination stays within ~/.claude/
-          if (!dest.startsWith(resolvedClaudeDir + "/") && dest !== resolvedClaudeDir) {
+          const relPath = relative(resolvedClaudeDir, dest);
+          if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
             console.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
             continue;
           }
@@ -243,7 +245,8 @@ export class PullCommand {
           const dest = resolve(join(this.claudeDir, entry.name));
 
           // Path containment: ensure destination stays within ~/.claude/
-          if (!dest.startsWith(resolvedClaudeDir + "/") && dest !== resolvedClaudeDir) {
+          const relPath = relative(resolvedClaudeDir, dest);
+          if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
             console.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
             continue;
           }
@@ -271,7 +274,9 @@ export class PullCommand {
    * the main branch (override markers may not survive merge into machine branch
    * due to conflicts from wipeAndPush).
    */
-  private async checkOverrideOnMain(gitAdapter: GitAdapter): Promise<{ machine: string; timestamp: string } | null> {
+  private async checkOverrideOnMain(
+    gitAdapter: GitAdapter,
+  ): Promise<{ machine: string; timestamp: string } | null> {
     // First check on current branch (works when merge succeeded)
     const override = await gitAdapter.checkOverrideMarker();
     if (override) return override;

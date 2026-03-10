@@ -32,18 +32,14 @@ export class LineEncryptor {
 
   encryptFileContent(content: string): string {
     if (content === "") return "";
-    const lines = content.endsWith("\n")
-      ? content.slice(0, -1).split("\n")
-      : content.split("\n");
+    const lines = content.endsWith("\n") ? content.slice(0, -1).split("\n") : content.split("\n");
     const encrypted = this.encryptLines(lines);
     return encrypted.join("\n") + "\n";
   }
 
   decryptFileContent(content: string): string {
     if (content === "" || content.trim() === "") return "";
-    const lines = content.endsWith("\n")
-      ? content.slice(0, -1).split("\n")
-      : content.split("\n");
+    const lines = content.endsWith("\n") ? content.slice(0, -1).split("\n") : content.split("\n");
     const decrypted = this.decryptLines(lines);
     return decrypted.join("\n") + "\n";
   }

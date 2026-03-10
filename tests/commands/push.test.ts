@@ -262,7 +262,7 @@ describe("PushCommand", () => {
     const manifest1 = JSON.parse(
       await readFile(join(verifyDir1, "store", "manifest.json"), "utf-8"),
     );
-    const lastSeen1 = manifest1.machines[0].lastSeen;
+    const lastSync1 = manifest1.machines[0].lastSync;
     await rm(verifyDir1, { recursive: true, force: true });
 
     // Wait a small bit so timestamps would differ
@@ -271,16 +271,16 @@ describe("PushCommand", () => {
     // Push again with no changes
     await push.execute({ quiet: true, skipEncryption: true });
 
-    // Read manifest after second push — lastSeen should NOT have changed
+    // Read manifest after second push — lastSync should NOT have changed
     const verifyDir2 = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
     await simpleGit(verifyDir2).clone(remoteDir, "store");
     const manifest2 = JSON.parse(
       await readFile(join(verifyDir2, "store", "manifest.json"), "utf-8"),
     );
-    const lastSeen2 = manifest2.machines[0].lastSeen;
+    const lastSync2 = manifest2.machines[0].lastSync;
     await rm(verifyDir2, { recursive: true, force: true });
 
-    expect(lastSeen2).toBe(lastSeen1);
+    expect(lastSync2).toBe(lastSync1);
   });
 
   it("uses per-machine branches", async () => {
