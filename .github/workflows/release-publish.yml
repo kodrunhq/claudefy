@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       version_bump:
-        description: "Version bump type"
+        description: "Version bump type (use 'current' to publish the version already in package.json)"
         required: true
         type: choice
         options:
+          - current
           - patch
           - minor
           - major
@@ -55,10 +56,21 @@ jobs:
           claudefy --help
 
       - name: Bump version
-        run: npm version "${{ inputs.version_bump }}" -m "release: v%s"
+        if: inputs.version_bump != 'current'
+        env:
+          VERSION_BUMP: ${{ inputs.version_bump }}
+        run: npm version "$VERSION_BUMP" -m "release: v%s"
 
-      - name: Push tag
+      - name: Push version commit
+        if: inputs.version_bump != 'current'
         run: git push --follow-tags
+
+      - name: Create tag (current version)
+        if: inputs.version_bump == 'current'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
 
       - name: Create GitHub Release
         env:
