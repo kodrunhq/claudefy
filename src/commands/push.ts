@@ -174,7 +174,7 @@ export class PushCommand {
 
       // Encrypt all files in unknown/
       if (existsSync(unknownDir)) {
-        await this.encryptDirectory(encryptor, unknownDir);
+        await encryptor.encryptDirectory(unknownDir);
       }
     }
 
@@ -205,16 +205,4 @@ export class PushCommand {
     return results;
   }
 
-  private async encryptDirectory(encryptor: Encryptor, dirPath: string): Promise<void> {
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        await this.encryptDirectory(encryptor, fullPath);
-      } else if (!entry.name.endsWith(".age")) {
-        await encryptor.encryptFile(fullPath, fullPath + ".age");
-        await rm(fullPath);
-      }
-    }
-  }
 }

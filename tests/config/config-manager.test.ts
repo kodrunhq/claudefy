@@ -119,4 +119,11 @@ describe("ConfigManager", () => {
       "Invalid config key",
     );
   });
+
+  it("rejects prototype pollution keys", async () => {
+    await configManager.initialize("git@github.com:user/store.git");
+    await expect(configManager.set("__proto__.polluted", "true")).rejects.toThrow("Forbidden config key segment");
+    await expect(configManager.set("constructor.polluted", "true")).rejects.toThrow("Forbidden config key segment");
+    await expect(configManager.set("prototype.polluted", "true")).rejects.toThrow("Forbidden config key segment");
+  });
 });

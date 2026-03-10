@@ -96,7 +96,7 @@ export class PullCommand {
 
       // Decrypt all .age files in unknown/
       if (existsSync(unknownDir)) {
-        await this.decryptDirectory(encryptor, unknownDir);
+        await encryptor.decryptDirectory(unknownDir);
       }
     }
 
@@ -237,8 +237,8 @@ export class PullCommand {
 
     // 6. Re-encrypt decrypted files in the store before committing,
     //    so plaintext is never committed to git history.
-    if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
-      const encryptor = new Encryptor(options.passphrase);
+    if (config.encryption.enabled && !options.skipEncryption) {
+      const encryptor = new Encryptor(options.passphrase!);
 
       const filesToReencrypt = ["settings.json", "history.jsonl"];
       for (const fileName of filesToReencrypt) {
@@ -251,7 +251,7 @@ export class PullCommand {
 
       // Re-encrypt all plaintext files in unknown/
       if (existsSync(unknownDir)) {
-        await this.encryptDirectory(encryptor, unknownDir);
+        await encryptor.encryptDirectory(unknownDir);
       }
     }
 
@@ -267,30 +267,4 @@ export class PullCommand {
     return result;
   }
 
-  private async decryptDirectory(encryptor: Encryptor, dirPath: string): Promise<void> {
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        await this.decryptDirectory(encryptor, fullPath);
-      } else if (entry.name.endsWith(".age")) {
-        const outputPath = fullPath.replace(/\.age$/, "");
-        await encryptor.decryptFile(fullPath, outputPath);
-        await rm(fullPath);
-      }
-    }
-  }
-
-  private async encryptDirectory(encryptor: Encryptor, dirPath: string): Promise<void> {
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        await this.encryptDirectory(encryptor, fullPath);
-      } else if (!entry.name.endsWith(".age")) {
-        await encryptor.encryptFile(fullPath, fullPath + ".age");
-        await rm(fullPath);
-      }
-    }
-  }
 }

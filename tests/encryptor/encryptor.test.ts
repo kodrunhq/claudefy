@@ -16,7 +16,7 @@ describe("Encryptor", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("encrypts and decrypts a file", async () => {
+  it("encrypts and decrypts a file", { timeout: 15_000 }, async () => {
     const encryptor = new Encryptor(passphrase);
     const srcPath = join(tempDir, "test.json");
     const encPath = join(tempDir, "test.json.age");

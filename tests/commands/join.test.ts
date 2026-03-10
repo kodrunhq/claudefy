@@ -11,6 +11,7 @@ describe("JoinCommand", () => {
   let initHomeDir: string;
   let joinHomeDir: string;
   let remoteDir: string;
+  const extraDirs: string[] = [];
 
   beforeEach(async () => {
     // Machine A: initializes the store
@@ -42,6 +43,10 @@ describe("JoinCommand", () => {
     await rm(initHomeDir, { recursive: true, force: true });
     await rm(joinHomeDir, { recursive: true, force: true });
     await rm(remoteDir, { recursive: true, force: true });
+    for (const dir of extraDirs) {
+      await rm(dir, { recursive: true, force: true });
+    }
+    extraDirs.length = 0;
   });
 
   it("successfully joins and syncs config from remote", async () => {
@@ -57,12 +62,11 @@ describe("JoinCommand", () => {
 
     // Machine should be registered in manifest
     const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-join-verify-"));
+    extraDirs.push(verifyDir);
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const manifest = JSON.parse(await readFile(join(verifyDir, "store", "manifest.json"), "utf-8"));
     // Should have at least 2 machines (init machine + join machine)
     expect(manifest.machines.length).toBeGreaterThanOrEqual(2);
-
-    await rm(verifyDir, { recursive: true, force: true });
   });
 
   it("throws when already initialized", async () => {
