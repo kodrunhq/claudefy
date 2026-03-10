@@ -37,6 +37,10 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/kodrunhq/claudefy/issues"
