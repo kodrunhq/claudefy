@@ -1,7 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
 
-const CLAUDEFY_MARKER = "claudefy";
-
 export class HookManager {
   private settingsPath: string;
 
@@ -15,7 +13,7 @@ export class HookManager {
     if (!settings.hooks) settings.hooks = {};
 
     // SessionStart -> pull
-    if (!settings.hooks.SessionStart) settings.hooks.SessionStart = [];
+    if (!Array.isArray(settings.hooks.SessionStart)) settings.hooks.SessionStart = [];
     if (!this.hasClaudefyHook(settings.hooks.SessionStart)) {
       settings.hooks.SessionStart.push({
         hooks: [
@@ -28,7 +26,7 @@ export class HookManager {
     }
 
     // SessionEnd -> push
-    if (!settings.hooks.SessionEnd) settings.hooks.SessionEnd = [];
+    if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
     if (!this.hasClaudefyHook(settings.hooks.SessionEnd)) {
       settings.hooks.SessionEnd.push({
         hooks: [
@@ -48,6 +46,7 @@ export class HookManager {
 
     if (settings.hooks) {
       for (const event of Object.keys(settings.hooks)) {
+        if (!Array.isArray(settings.hooks[event])) continue;
         settings.hooks[event] = settings.hooks[event].filter(
           (h: any) => !this.isClaudefyHookEntry(h)
         );
@@ -80,14 +79,28 @@ export class HookManager {
   }
 
   private isClaudefyHookEntry(hookEntry: any): boolean {
-    return hookEntry.hooks?.some((h: any) =>
-      h.command?.includes(CLAUDEFY_MARKER)
-    );
+    return hookEntry.hooks?.some((h: any) => {
+      const command = typeof h.command === "string" ? h.command.trim() : "";
+      return command.startsWith("claudefy pull") || command.startsWith("claudefy push");
+    });
   }
 
   private async loadSettings(): Promise<any> {
-    const content = await readFile(this.settingsPath, "utf-8");
-    return JSON.parse(content);
+    try {
+      const content = await readFile(this.settingsPath, "utf-8");
+      if (content.trim() === "") return {};
+      try {
+        return JSON.parse(content);
+      } catch (err) {
+        if (err instanceof SyntaxError) return {};
+        throw err;
+      }
+    } catch (err: unknown) {
+      if (typeof err === "object" && err !== null && (err as any).code === "ENOENT") {
+        return {};
+      }
+      throw err;
+    }
   }
 
   private async saveSettings(settings: any): Promise<void> {

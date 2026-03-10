@@ -10,7 +10,8 @@ export class BackupManager {
 
   async createBackup(claudeDir: string, label: string): Promise<string> {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const backupName = `${timestamp}--${label}`;
+    const safeLabel = label.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const backupName = `${timestamp}--${safeLabel}`;
     const backupPath = join(this.backupsDir, backupName);
 
     await mkdir(backupPath, { recursive: true });

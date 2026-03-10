@@ -1,5 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { dirname } from "node:path";
 
 export interface MachineEntry {
   machineId: string;
@@ -61,10 +62,23 @@ export class MachineRegistry {
       return { version: 1, machines: [] };
     }
     const raw = await readFile(this.manifestPath, "utf-8");
-    return JSON.parse(raw);
+    if (raw.trim() === "") {
+      return { version: 1, machines: [] };
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      if (err instanceof SyntaxError) {
+        throw new Error(
+          `Invalid manifest JSON in "${this.manifestPath}": ${err.message}`,
+        );
+      }
+      throw err;
+    }
   }
 
   private async saveManifest(manifest: Manifest): Promise<void> {
+    await mkdir(dirname(this.manifestPath), { recursive: true });
     await writeFile(this.manifestPath, JSON.stringify(manifest, null, 2));
   }
 }
