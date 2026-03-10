@@ -27,12 +27,18 @@ export class SecretScanner {
 
     for (let i = 0; i < lines.length; i++) {
       for (const pattern of SECRET_PATTERNS) {
-        if (pattern.regex.test(lines[i])) {
+        const match = pattern.regex.exec(lines[i]);
+        if (match) {
+          // Redact matched secret, showing only prefix and suffix
+          const matched = match[0];
+          const redacted = matched.length > 8
+            ? matched.slice(0, 4) + "****" + matched.slice(-4)
+            : "****";
           findings.push({
             file: filePath,
             line: i + 1,
             pattern: pattern.name,
-            snippet: lines[i].slice(0, 80),
+            snippet: lines[i].slice(0, 80).replace(matched, redacted),
           });
         }
       }

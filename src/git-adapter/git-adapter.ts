@@ -26,8 +26,16 @@ export class GitAdapter {
 
     try {
       await simpleGit(this.baseDir).clone(remoteUrl, "store");
-    } catch {
-      // Empty bare repo — init locally and set remote
+    } catch (error) {
+      // Check if remote is empty (no refs) — only then initialize locally
+      const refs = await simpleGit(this.baseDir)
+        .listRemote([remoteUrl])
+        .catch(() => "");
+      if (refs.trim()) {
+        throw new Error(
+          `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`
+        );
+      }
       await mkdir(this.storePath, { recursive: true });
       const git = simpleGit(this.storePath);
       await git.init();
@@ -56,6 +64,7 @@ export class GitAdapter {
   }
 
   async writeOverrideMarker(machineId: string): Promise<void> {
+    this.ensureInitialized();
     const marker: OverrideMarker = {
       machine: machineId,
       timestamp: new Date().toISOString(),
@@ -67,13 +76,20 @@ export class GitAdapter {
   }
 
   async checkOverrideMarker(): Promise<OverrideMarker | null> {
+    this.ensureInitialized();
     const path = join(this.storePath, ".override");
     if (!existsSync(path)) return null;
     const content = await readFile(path, "utf-8");
-    return JSON.parse(content);
+    try {
+      return JSON.parse(content) as OverrideMarker;
+    } catch (error) {
+      if (error instanceof SyntaxError) return null;
+      throw error;
+    }
   }
 
   async removeOverrideMarker(): Promise<void> {
+    this.ensureInitialized();
     const path = join(this.storePath, ".override");
     if (existsSync(path)) {
       await rm(path);

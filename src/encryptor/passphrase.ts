@@ -1,4 +1,5 @@
 import { env } from "node:process";
+import { createRequire } from "node:module";
 
 export type PassphraseSource = "env" | "keychain" | "prompt" | "none";
 
@@ -17,7 +18,8 @@ export async function resolvePassphrase(
 
   if (useKeychain) {
     try {
-      const keytar = await import("keytar");
+      const require = createRequire(import.meta.url);
+      const keytar = require("keytar");
       const stored = await keytar.getPassword("claudefy", "passphrase");
       if (stored) {
         return { passphrase: stored, source: "keychain" };
@@ -34,7 +36,8 @@ export async function storePassphraseInKeychain(
   passphrase: string
 ): Promise<boolean> {
   try {
-    const keytar = await import("keytar");
+    const require = createRequire(import.meta.url);
+    const keytar = require("keytar");
     await keytar.setPassword("claudefy", "passphrase", passphrase);
     return true;
   } catch {
