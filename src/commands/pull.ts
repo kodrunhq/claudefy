@@ -64,7 +64,7 @@ export class PullCommand {
         result.backupPath = await backupManager.createBackup(this.claudeDir, "pre-override");
       }
 
-      if (!options.quiet) {
+      if (!options.quiet && result.backupPath) {
         console.log(`Backup created at: ${result.backupPath}`);
       }
 

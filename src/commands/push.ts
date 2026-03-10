@@ -32,6 +32,9 @@ export class PushCommand {
     const syncFilter = new SyncFilter(syncFilterConfig);
 
     // 1. Classify ~/.claude contents
+    if (!existsSync(this.claudeDir)) {
+      throw new Error(`No ${this.claudeDir} directory found. Nothing to push.`);
+    }
     const classification = await syncFilter.classify(this.claudeDir);
 
     const willEncrypt = config.encryption.enabled && !options.skipEncryption;
