@@ -7,7 +7,7 @@ Sync your Claude Code environment across machines.
 claudefy syncs your `~/.claude` directory (commands, skills, agents, hooks, rules, plans, plugins, settings, and project configs) across multiple machines using a private git repository as the backend. It handles:
 
 - **Selective sync** — three-tier filter (allow/deny/unknown) controls what syncs
-- **Encryption** — sensitive and unknown files encrypted with age before push
+- **Encryption** — sensitive and unknown files encrypted with AES-256-SIV before push
 - **Path remapping** — machine-specific paths normalized to canonical IDs
 - **Deep merge** — settings.json merged at the key level; other files use last-write-wins
 - **Override** — wipe remote and push local as source of truth when needed
@@ -120,7 +120,7 @@ Pass `--hooks` to `init` or `join` to install auto-sync hooks automatically.
 
 ## Encryption
 
-claudefy encrypts files using [age](https://age-encryption.org/) (WASM-based, no native binary needed) with AES-256-SIV deterministic encryption.
+claudefy encrypts files using AES-256-SIV deterministic encryption via `@noble/ciphers`.
 
 **Why deterministic?** Same plaintext always produces the same ciphertext. This means unchanged files produce no git diff, and git's merge machinery can work with encrypted content.
 
@@ -170,7 +170,7 @@ claudefy config set encryption.useKeychain true
 ## Security Model
 
 - `.credentials.json` is never synced (hardcoded in the deny list)
-- Hooks from remote are stripped on pull to prevent code injection
+- All hooks from remote are stripped on pull to prevent code injection
 - Secret scanner detects common patterns (API keys, tokens, high-entropy strings) before push — not exhaustive, but catches the obvious ones
 - Files with detected secrets are encrypted before commit rather than blocking the push
 - Passphrases never stored in plain text on disk

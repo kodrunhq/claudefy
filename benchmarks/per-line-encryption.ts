@@ -1,5 +1,5 @@
 /**
- * Benchmark: per-line deterministic encryption vs current age file encryption.
+ * Benchmark: per-line deterministic encryption with AES-256-SIV.
  *
  * Tests with realistic .jsonl session files at various sizes.
  * Run: npx tsx benchmarks/per-line-encryption.ts
@@ -7,7 +7,6 @@
 import { aessiv } from "@noble/ciphers/aes.js";
 import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
-import { Encrypter, Decrypter } from "age-encryption";
 
 // --- Deterministic per-line encryption using AES-256-SIV ---
 
@@ -16,8 +15,6 @@ function deriveKey(passphrase: string, salt: string): Uint8Array {
 }
 
 function encryptLine(line: string, key: Uint8Array): string {
-  // AES-SIV is deterministic: same key + same plaintext = same ciphertext
-  // We use an empty nonce since SIV mode derives the IV from plaintext
   const cipher = aessiv(key, new Uint8Array(0));
   const plaintext = new TextEncoder().encode(line);
   const encrypted = cipher.encrypt(plaintext);
@@ -53,7 +50,6 @@ function generateSessionLine(index: number): string {
     });
   }
 
-  // Assistant responses are typically much larger
   const codeBlock = `function example${index}() {\n  const data = await fetch('/api/endpoint');\n  if (!data.ok) throw new Error('Failed');\n  return data.json();\n}`;
   return JSON.stringify({
     role: "assistant",
@@ -98,44 +94,6 @@ async function benchmarkPerLine(lines: string[], key: Uint8Array) {
   return { encryptTime, decryptTime, encryptedSize, plaintextSize };
 }
 
-async function benchmarkAge(lines: string[], passphrase: string) {
-  const fullContent = lines.join("\n");
-  const data = new TextEncoder().encode(fullContent);
-
-  const start = performance.now();
-  const e = new Encrypter();
-  e.setPassphrase(passphrase);
-  const encrypted = await e.encrypt(data);
-  const encryptTime = performance.now() - start;
-
-  const start2 = performance.now();
-  const d = new Decrypter();
-  d.addPassphrase(passphrase);
-  const decrypted = await d.decrypt(encrypted, "uint8array");
-  const decryptTime = performance.now() - start2;
-
-  // Verify correctness
-  if (new TextDecoder().decode(decrypted) !== fullContent) {
-    throw new Error("Age decrypt mismatch");
-  }
-
-  // Verify non-determinism (age uses random nonce)
-  const e2 = new Encrypter();
-  e2.setPassphrase(passphrase);
-  const encrypted2 = await e2.encrypt(data);
-  const sameOutput =
-    encrypted.length === encrypted2.length &&
-    Buffer.from(encrypted).toString("hex") === Buffer.from(encrypted2).toString("hex");
-
-  return {
-    encryptTime,
-    decryptTime,
-    encryptedSize: encrypted.length,
-    plaintextSize: data.length,
-    deterministic: sameOutput,
-  };
-}
-
 // --- Incremental diff simulation ---
 
 function simulateIncrementalPush(
@@ -175,7 +133,6 @@ async function main() {
 
     console.log(`--- ${size} lines (${(plaintextBytes / 1024).toFixed(1)} KB plaintext) ---`);
 
-    // Per-line AES-SIV
     const sivResult = await benchmarkPerLine(lines, key);
     console.log(`  AES-SIV per-line:`);
     console.log(`    Encrypt: ${sivResult.encryptTime.toFixed(1)}ms`);
@@ -184,16 +141,6 @@ async function main() {
       `    Size:    ${(sivResult.encryptedSize / 1024).toFixed(1)} KB (${((sivResult.encryptedSize / sivResult.plaintextSize) * 100).toFixed(0)}% of plaintext)`,
     );
     console.log(`    Deterministic: YES`);
-
-    // Age file-level
-    const ageResult = await benchmarkAge(lines, passphrase);
-    console.log(`  Age file-level:`);
-    console.log(`    Encrypt: ${ageResult.encryptTime.toFixed(1)}ms`);
-    console.log(`    Decrypt: ${ageResult.decryptTime.toFixed(1)}ms`);
-    console.log(
-      `    Size:    ${(ageResult.encryptedSize / 1024).toFixed(1)} KB (${((ageResult.encryptedSize / ageResult.plaintextSize) * 100).toFixed(0)}% of plaintext)`,
-    );
-    console.log(`    Deterministic: ${ageResult.deterministic ? "YES" : "NO"}`);
 
     // Incremental push simulation (append 10 new lines to existing session)
     const previousLines = lines.slice(0, -10);
@@ -216,20 +163,6 @@ async function main() {
   const allMatch = enc1.every((line, i) => line === enc2[i]);
   console.log(
     `  100 lines encrypted twice: ${allMatch ? "IDENTICAL (git sees no diff)" : "DIFFERENT (git sees changes)"}`,
-  );
-
-  // Show what git would see with age
-  const e1 = new Encrypter();
-  e1.setPassphrase(passphrase);
-  const age1 = await e1.encrypt(new TextEncoder().encode(testLines.join("\n")));
-  const e2 = new Encrypter();
-  e2.setPassphrase(passphrase);
-  const age2 = await e2.encrypt(new TextEncoder().encode(testLines.join("\n")));
-  const ageMatch =
-    age1.length === age2.length &&
-    Buffer.from(age1).toString("hex") === Buffer.from(age2).toString("hex");
-  console.log(
-    `  Same content with age:      ${ageMatch ? "IDENTICAL (git sees no diff)" : "DIFFERENT (git sees full file changed)"}`,
   );
 }
 

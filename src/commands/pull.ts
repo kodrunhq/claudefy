@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PathMapper } from "../path-mapper/path-mapper.js";
-import { MachineRegistry } from "../machine-registry/machine-registry.js";
+
 import { Encryptor } from "../encryptor/encryptor.js";
 import { Merger } from "../merger/merger.js";
 import { BackupManager } from "../backup-manager/backup-manager.js";
@@ -22,13 +22,6 @@ export interface PullResult {
   filesUpdated: number;
 }
 
-function isClaudefyHook(hookEntry: { hooks?: Array<{ command?: string }> }): boolean {
-  if (!Array.isArray(hookEntry.hooks)) return false;
-  return hookEntry.hooks.some((h) => {
-    const command = typeof h.command === "string" ? h.command.trim() : "";
-    return command.startsWith("claudefy pull") || command.startsWith("claudefy push");
-  });
-}
 
 export class PullCommand {
   private homeDir: string;
@@ -82,8 +75,16 @@ export class PullCommand {
       const git = sg(storePath);
       await git.reset(["--hard", "main"]);
 
-      // Remove override marker on current branch
+      // Remove override marker and commit the acknowledgement locally.
+      // The commit will be pushed on the next normal push.
       await gitAdapter.removeOverrideMarker();
+      const { simpleGit: sgCommit } = await import("simple-git");
+      const gitCommit = sgCommit(storePath);
+      await gitCommit.add(["."]);
+      const status = await gitCommit.status();
+      if (!status.isClean()) {
+        await gitCommit.commit("acknowledge override marker removal");
+      }
     }
 
     // 3. Create temp working directory
@@ -187,20 +188,9 @@ export class PullCommand {
         const localSettingsPath = join(this.claudeDir, "settings.json");
         const remoteSettings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
 
-        // Security: filter out claudefy-managed hooks but preserve user hooks
-        if (remoteSettings.hooks) {
-          for (const event of Object.keys(remoteSettings.hooks)) {
-            if (!Array.isArray(remoteSettings.hooks[event])) continue;
-            remoteSettings.hooks[event] = remoteSettings.hooks[event].filter(
-              (h: any) => !isClaudefyHook(h),
-            );
-            if (remoteSettings.hooks[event].length === 0) {
-              delete remoteSettings.hooks[event];
-            }
-          }
-          if (Object.keys(remoteSettings.hooks).length === 0) {
-            delete remoteSettings.hooks;
-          }
+        // Security: strip all hooks from remote to prevent code injection
+        if (remoteSettings && typeof remoteSettings === "object" && "hooks" in remoteSettings) {
+          delete remoteSettings.hooks;
         }
 
         if (existsSync(localSettingsPath) && !result.overrideDetected) {
@@ -291,8 +281,6 @@ export class PullCommand {
     if (currentBranch === "main") return null;
 
     const storePath = gitAdapter.getStorePath();
-    const overridePath = join(storePath, ".override");
-
     try {
       const { simpleGit } = await import("simple-git");
       const git = simpleGit(storePath);

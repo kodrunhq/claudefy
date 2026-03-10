@@ -54,7 +54,15 @@ export class PushCommand {
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(config.backend.url);
     await gitAdapter.ensureMachineBranch(config.machineId);
-    await gitAdapter.pullAndMergeMain();
+    try {
+      await gitAdapter.pullAndMergeMain();
+    } catch {
+      if (!options.quiet) {
+        output.info(
+          "Warning: Unable to pull latest changes from remote; proceeding with local state only.",
+        );
+      }
+    }
 
     const storePath = gitAdapter.getStorePath();
     const stagingDir = join(storePath, ".staging");

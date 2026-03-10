@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PullCommand } from "../../src/commands/pull.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { GitAdapter } from "../../src/git-adapter/git-adapter.js";
-import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -136,7 +136,7 @@ describe("PullCommand", () => {
     expect(settings.hooks).toBeUndefined();
   });
 
-  it("preserves non-claudefy hooks from remote settings", async () => {
+  it("strips all hooks from remote settings to prevent code injection", async () => {
     // Push settings with both claudefy and user hooks from Machine A
     await writeFile(
       join(pushHomeDir, ".claude", "settings.json"),
@@ -173,13 +173,8 @@ describe("PullCommand", () => {
       await readFile(join(pullHomeDir, ".claude", "settings.json"), "utf-8"),
     );
 
-    // Claudefy hooks should be stripped
-    // User hook "my-custom-tool setup" should be preserved
-    expect(settings.hooks).toBeDefined();
-    expect(settings.hooks.SessionStart).toHaveLength(1);
-    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe("my-custom-tool setup");
-    // SessionEnd had only claudefy hooks, so it should be removed entirely
-    expect(settings.hooks.SessionEnd).toBeUndefined();
+    // All hooks from remote should be stripped to prevent code injection
+    expect(settings.hooks).toBeUndefined();
   });
 
   it("detects override marker and creates backup", async () => {
