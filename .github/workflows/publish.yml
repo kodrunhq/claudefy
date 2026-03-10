@@ -1,0 +1,85 @@
+name: Release & Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: "Version bump type (use 'current' to publish the version already in package.json)"
+        required: true
+        type: choice
+        options:
+          - current
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    name: Release & Publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Run tests
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke test
+        run: |
+          npm pack
+          TARBALL=$(ls kodrunhq-claudefy-*.tgz)
+          npm install -g "./${TARBALL}"
+          claudefy --version
+          claudefy --help
+
+      - name: Bump version
+        if: inputs.version_bump != 'current'
+        env:
+          VERSION_BUMP: ${{ inputs.version_bump }}
+        run: npm version "$VERSION_BUMP" -m "release: v%s"
+
+      - name: Push version commit
+        if: inputs.version_bump != 'current'
+        run: git push --follow-tags
+
+      - name: Create tag (current version)
+        if: inputs.version_bump == 'current'
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --generate-notes
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
