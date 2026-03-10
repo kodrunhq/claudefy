@@ -140,44 +140,40 @@ export class PushCommand {
       }
     }
 
-    // 7. Encrypt files if encryption is enabled (before scanning, so encrypted
-    //    files don't trigger false positives — they'll be .age blobs)
-    if (config.encryption.enabled && !options.skipEncryption) {
-      if (!options.passphrase) {
-        throw new Error(
-          "Encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
-        );
-      }
-      const encryptor = new Encryptor(options.passphrase);
-
-      // Encrypt sensitive config files
-      const filesToEncrypt = ["settings.json", "history.jsonl"];
-      for (const fileName of filesToEncrypt) {
-        const filePath = join(configDir, fileName);
-        if (existsSync(filePath)) {
-          await encryptor.encryptFile(filePath, filePath + ".age");
-          await rm(filePath);
-        }
-      }
-
-      // Encrypt all files in unknown/
-      if (existsSync(unknownDir)) {
-        await encryptor.encryptDirectory(unknownDir);
-      }
-    }
-
-    // 8. Scan remaining plaintext files for secrets before committing
+    // 7. Scan for secrets and encrypt files that contain them
     if (!options.skipSecretScan) {
       const scanner = new SecretScanner();
-      const filesToScan = await this.collectFiles(configDir);
-      const unknownFiles = await this.collectFiles(unknownDir);
-      filesToScan.push(...unknownFiles);
-      const findings = await scanner.scanFiles(filesToScan);
+      const allFiles = [
+        ...(await this.collectFiles(configDir)),
+        ...(await this.collectFiles(unknownDir)),
+      ];
+      const findings = await scanner.scanFiles(allFiles);
+
       if (findings.length > 0) {
-        const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
-        throw new Error(
-          `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nAborting push. Use --skip-secret-scan to bypass scanning.`,
-        );
+        if (!config.encryption.enabled || options.skipEncryption) {
+          const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+          throw new Error(
+            `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nEnable encryption or use --skip-secret-scan to bypass scanning.`,
+          );
+        }
+        if (!options.passphrase) {
+          throw new Error(
+            "Secrets detected and encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+          );
+        }
+
+        const encryptor = new Encryptor(options.passphrase);
+        const filesToEncrypt = new Set(findings.map((f) => f.file));
+        for (const filePath of filesToEncrypt) {
+          if (existsSync(filePath) && !filePath.endsWith(".age")) {
+            await encryptor.encryptFile(filePath, filePath + ".age");
+            await rm(filePath);
+          }
+        }
+
+        if (!options.quiet) {
+          output.info(`Encrypted ${filesToEncrypt.size} file(s) containing potential secrets.`);
+        }
       }
     }
 

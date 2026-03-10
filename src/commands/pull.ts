@@ -75,28 +75,18 @@ export class PullCommand {
       await gitAdapter.commitAndPush("pull: acknowledge override");
     }
 
-    // 3. Decrypt .age files if encryption is enabled
-    if (config.encryption.enabled && !options.skipEncryption) {
+    // 3. Decrypt any .age files found (encrypted during push due to detected secrets)
+    const encryptedFiles = await this.collectAgeFiles(configDir, unknownDir);
+    if (encryptedFiles.length > 0) {
       if (!options.passphrase) {
         throw new Error(
-          "Encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+          "Encrypted files found but no passphrase available. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
         );
       }
-
       const encryptor = new Encryptor(options.passphrase);
-
-      // Decrypt sensitive config files
-      const filesToDecrypt = ["settings.json.age", "history.jsonl.age"];
-      for (const fileName of filesToDecrypt) {
-        const filePath = join(configDir, fileName);
-        if (existsSync(filePath)) {
-          const outputPath = filePath.replace(/\.age$/, "");
-          await encryptor.decryptFile(filePath, outputPath);
-          await rm(filePath);
-        }
+      if (existsSync(configDir)) {
+        await encryptor.decryptDirectory(configDir);
       }
-
-      // Decrypt all .age files in unknown/
       if (existsSync(unknownDir)) {
         await encryptor.decryptDirectory(unknownDir);
       }
@@ -237,23 +227,16 @@ export class PullCommand {
       }
     }
 
-    // 6. Re-encrypt decrypted files in the store before committing,
-    //    so plaintext is never committed to git history.
-    if (config.encryption.enabled && !options.skipEncryption) {
+    // 6. Re-encrypt files that were originally encrypted, so plaintext
+    //    is never committed to git history.
+    if (encryptedFiles.length > 0) {
       const encryptor = new Encryptor(options.passphrase!);
-
-      const filesToReencrypt = ["settings.json", "history.jsonl"];
-      for (const fileName of filesToReencrypt) {
-        const filePath = join(configDir, fileName);
-        if (existsSync(filePath)) {
-          await encryptor.encryptFile(filePath, filePath + ".age");
-          await rm(filePath);
+      for (const agePath of encryptedFiles) {
+        const plaintextPath = agePath.replace(/\.age$/, "");
+        if (existsSync(plaintextPath)) {
+          await encryptor.encryptFile(plaintextPath, agePath);
+          await rm(plaintextPath);
         }
-      }
-
-      // Re-encrypt all plaintext files in unknown/
-      if (existsSync(unknownDir)) {
-        await encryptor.encryptDirectory(unknownDir);
       }
     }
 
@@ -267,5 +250,26 @@ export class PullCommand {
     }
 
     return result;
+  }
+
+  private async collectAgeFiles(...dirs: string[]): Promise<string[]> {
+    const results: string[] = [];
+    for (const dir of dirs) {
+      if (!existsSync(dir)) continue;
+      await this.walkAgeFiles(dir, results);
+    }
+    return results;
+  }
+
+  private async walkAgeFiles(dirPath: string, results: string[]): Promise<void> {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await this.walkAgeFiles(fullPath, results);
+      } else if (entry.name.endsWith(".age")) {
+        results.push(fullPath);
+      }
+    }
   }
 }
