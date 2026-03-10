@@ -8,9 +8,7 @@ export interface PassphraseResult {
   source: PassphraseSource;
 }
 
-export async function resolvePassphrase(
-  useKeychain: boolean
-): Promise<PassphraseResult | null> {
+export async function resolvePassphrase(useKeychain: boolean): Promise<PassphraseResult | null> {
   const envPassphrase = env.CLAUDEFY_PASSPHRASE;
   if (envPassphrase) {
     return { passphrase: envPassphrase, source: "env" };
@@ -32,9 +30,7 @@ export async function resolvePassphrase(
   return null;
 }
 
-export async function storePassphraseInKeychain(
-  passphrase: string
-): Promise<boolean> {
+export async function storePassphraseInKeychain(passphrase: string): Promise<boolean> {
   try {
     const require = createRequire(import.meta.url);
     const keytar = require("keytar");

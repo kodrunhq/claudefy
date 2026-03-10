@@ -22,9 +22,7 @@ describe("PathMapper", () => {
 
   describe("project directory names", () => {
     it("normalizes directory name to canonical ID on push", () => {
-      const result = mapper.normalizeDirName(
-        "-home-user-projects-kodrun"
-      );
+      const result = mapper.normalizeDirName("-home-user-projects-kodrun");
       expect(result).toBe("github.com--kodrunhq--kodrun");
     });
 
@@ -114,8 +112,7 @@ describe("PathMapper", () => {
               hooks: [
                 {
                   type: "command",
-                  command:
-                    'node "/home/user/.claude/hooks/gsd-check-update.js"',
+                  command: 'node "/home/user/.claude/hooks/gsd-check-update.js"',
                 },
               ],
             },
@@ -125,7 +122,7 @@ describe("PathMapper", () => {
       const claudeDir = "/home/user/.claude";
       const result = mapper.normalizeSettingsPaths(settings, claudeDir);
       expect(result.hooks.SessionStart[0].hooks[0].command).toBe(
-        'node "@@CLAUDE_DIR@@/hooks/gsd-check-update.js"'
+        'node "@@CLAUDE_DIR@@/hooks/gsd-check-update.js"',
       );
     });
 
@@ -137,8 +134,7 @@ describe("PathMapper", () => {
               hooks: [
                 {
                   type: "command",
-                  command:
-                    'node "@@CLAUDE_DIR@@/hooks/gsd-check-update.js"',
+                  command: 'node "@@CLAUDE_DIR@@/hooks/gsd-check-update.js"',
                 },
               ],
             },
@@ -148,7 +144,7 @@ describe("PathMapper", () => {
       const claudeDir = "/Users/user/.claude";
       const result = mapper.remapSettingsPaths(settings, claudeDir);
       expect(result.hooks.SessionStart[0].hooks[0].command).toBe(
-        'node "/Users/user/.claude/hooks/gsd-check-update.js"'
+        'node "/Users/user/.claude/hooks/gsd-check-update.js"',
       );
     });
   });
@@ -170,10 +166,8 @@ describe("PathMapper", () => {
       };
       const claudeDir = "/home/user/.claude";
       const result = mapper.normalizePluginPaths(plugins, claudeDir);
-      expect(
-        result.plugins["github@claude-plugins-official"][0].installPath
-      ).toBe(
-        "@@CLAUDE_DIR@@/plugins/cache/claude-plugins-official/github/205b6e0b3036"
+      expect(result.plugins["github@claude-plugins-official"][0].installPath).toBe(
+        "@@CLAUDE_DIR@@/plugins/cache/claude-plugins-official/github/205b6e0b3036",
       );
     });
 
@@ -193,10 +187,8 @@ describe("PathMapper", () => {
       };
       const claudeDir = "/Users/user/.claude";
       const result = mapper.remapPluginPaths(plugins, claudeDir);
-      expect(
-        result.plugins["github@claude-plugins-official"][0].installPath
-      ).toBe(
-        "/Users/user/.claude/plugins/cache/claude-plugins-official/github/205b6e0b3036"
+      expect(result.plugins["github@claude-plugins-official"][0].installPath).toBe(
+        "/Users/user/.claude/plugins/cache/claude-plugins-official/github/205b6e0b3036",
       );
     });
   });

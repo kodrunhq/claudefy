@@ -32,15 +32,9 @@ describe("BackupManager", () => {
     const backupPath = await backupManager.createBackup(claudeDir, "pre-override");
 
     expect(existsSync(backupPath)).toBe(true);
-    const settings = await readFile(
-      join(backupPath, "settings.json"),
-      "utf-8"
-    );
+    const settings = await readFile(join(backupPath, "settings.json"), "utf-8");
     expect(settings).toBe('{"key": "value"}');
-    const command = await readFile(
-      join(backupPath, "commands", "test.md"),
-      "utf-8"
-    );
+    const command = await readFile(join(backupPath, "commands", "test.md"), "utf-8");
     expect(command).toBe("# Test");
   });
 

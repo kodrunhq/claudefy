@@ -64,9 +64,7 @@ describe("Path Remapping Integration", () => {
     });
 
     // Verify paths were remapped to Machine B's claudeDir
-    const settingsB = JSON.parse(
-      await readFile(join(claudeDirB, "settings.json"), "utf-8"),
-    );
+    const settingsB = JSON.parse(await readFile(join(claudeDirB, "settings.json"), "utf-8"));
     expect(settingsB.mcpServers?.test?.command).toBeDefined();
     expect(settingsB.mcpServers!.test!.command!).toContain(claudeDirB);
     expect(settingsB.mcpServers!.test!.command!).not.toContain(claudeDirA);

@@ -34,18 +34,24 @@ describe("StatusCommand", () => {
 
     // Create config
     await mkdir(claudefyDir, { recursive: true });
-    await writeFile(join(claudefyDir, "config.json"), JSON.stringify({
-      version: 1,
-      backend: { type: "git", url: "https://example.com/repo.git" },
-      encryption: { enabled: false, useKeychain: false, cacheDuration: "0" },
-      sync: { lfsThreshold: 524288 },
-      filter: {},
-      machineId: "test-machine",
-    }));
-    await writeFile(join(claudefyDir, "sync-filter.json"), JSON.stringify({
-      allowlist: ["commands", "settings.json"],
-      denylist: ["cache"],
-    }));
+    await writeFile(
+      join(claudefyDir, "config.json"),
+      JSON.stringify({
+        version: 1,
+        backend: { type: "git", url: "https://example.com/repo.git" },
+        encryption: { enabled: false, useKeychain: false, cacheDuration: "0" },
+        sync: { lfsThreshold: 524288 },
+        filter: {},
+        machineId: "test-machine",
+      }),
+    );
+    await writeFile(
+      join(claudefyDir, "sync-filter.json"),
+      JSON.stringify({
+        allowlist: ["commands", "settings.json"],
+        denylist: ["cache"],
+      }),
+    );
 
     const cmd = new StatusCommand(homeDir);
     const result = await cmd.execute();

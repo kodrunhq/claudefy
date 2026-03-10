@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PullCommand } from "../../src/commands/pull.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { GitAdapter } from "../../src/git-adapter/git-adapter.js";
-import {
-  mkdtemp, rm, mkdir, writeFile, readFile, readdir,
-} from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -33,10 +31,13 @@ describe("PullCommand", () => {
     await writeFile(join(pushClaudeDir, "commands", "test.md"), "# Test Command");
     await mkdir(join(pushClaudeDir, "agents"), { recursive: true });
     await writeFile(join(pushClaudeDir, "agents", "my-agent.md"), "# Agent");
-    await writeFile(join(pushClaudeDir, "settings.json"), JSON.stringify({
-      theme: "dark",
-      hooks: { SessionStart: [] },
-    }));
+    await writeFile(
+      join(pushClaudeDir, "settings.json"),
+      JSON.stringify({
+        theme: "dark",
+        hooks: { SessionStart: [] },
+      }),
+    );
 
     // Machine A config
     await mkdir(join(pushClaudefyDir, "backups"), { recursive: true });
@@ -49,7 +50,7 @@ describe("PullCommand", () => {
         sync: { lfsThreshold: 512 * 1024 },
         filter: {},
         machineId: "machine-a",
-      })
+      }),
     );
     await writeFile(join(pushClaudefyDir, "links.json"), "{}");
     await writeFile(
@@ -57,7 +58,7 @@ describe("PullCommand", () => {
       JSON.stringify({
         allowlist: ["commands", "agents", "settings.json"],
         denylist: ["cache"],
-      })
+      }),
     );
 
     // Push from Machine A
@@ -79,7 +80,7 @@ describe("PullCommand", () => {
         sync: { lfsThreshold: 512 * 1024 },
         filter: {},
         machineId: "machine-b",
-      })
+      }),
     );
     await writeFile(join(pullClaudefyDir, "links.json"), "{}");
     await writeFile(
@@ -87,7 +88,7 @@ describe("PullCommand", () => {
       JSON.stringify({
         allowlist: ["commands", "agents", "settings.json"],
         denylist: ["cache"],
-      })
+      }),
     );
   });
 
@@ -103,16 +104,10 @@ describe("PullCommand", () => {
 
     const pullClaudeDir = join(pullHomeDir, ".claude");
 
-    const command = await readFile(
-      join(pullClaudeDir, "commands", "test.md"),
-      "utf-8"
-    );
+    const command = await readFile(join(pullClaudeDir, "commands", "test.md"), "utf-8");
     expect(command).toBe("# Test Command");
 
-    const agent = await readFile(
-      join(pullClaudeDir, "agents", "my-agent.md"),
-      "utf-8"
-    );
+    const agent = await readFile(join(pullClaudeDir, "agents", "my-agent.md"), "utf-8");
     expect(agent).toBe("# Agent");
 
     expect(result.filesUpdated).toBeGreaterThan(0);
@@ -123,14 +118,14 @@ describe("PullCommand", () => {
     // Machine B has its own settings
     await writeFile(
       join(pullHomeDir, ".claude", "settings.json"),
-      JSON.stringify({ theme: "light", editor: "vim" })
+      JSON.stringify({ theme: "light", editor: "vim" }),
     );
 
     const pull = new PullCommand(pullHomeDir);
     await pull.execute({ quiet: true, skipEncryption: true });
 
     const settings = JSON.parse(
-      await readFile(join(pullHomeDir, ".claude", "settings.json"), "utf-8")
+      await readFile(join(pullHomeDir, ".claude", "settings.json"), "utf-8"),
     );
 
     // Remote "dark" theme wins (remote-wins strategy via deepmerge)
@@ -152,7 +147,7 @@ describe("PullCommand", () => {
     // Machine B has existing content that should be backed up
     await writeFile(
       join(pullHomeDir, ".claude", "settings.json"),
-      JSON.stringify({ theme: "light" })
+      JSON.stringify({ theme: "light" }),
     );
 
     const pull = new PullCommand(pullHomeDir);
@@ -174,7 +169,7 @@ describe("PullCommand", () => {
         sync: { lfsThreshold: 512 * 1024 },
         filter: {},
         machineId: "machine-a",
-      })
+      }),
     );
 
     const push = new PushCommand(pushHomeDir);
@@ -190,7 +185,7 @@ describe("PullCommand", () => {
         sync: { lfsThreshold: 512 * 1024 },
         filter: {},
         machineId: "machine-b",
-      })
+      }),
     );
 
     const pull = new PullCommand(pullHomeDir);
@@ -198,7 +193,7 @@ describe("PullCommand", () => {
 
     // Verify decrypted content arrived
     const settings = JSON.parse(
-      await readFile(join(pullHomeDir, ".claude", "settings.json"), "utf-8")
+      await readFile(join(pullHomeDir, ".claude", "settings.json"), "utf-8"),
     );
     expect(settings.theme).toBe("dark");
   });
@@ -219,7 +214,7 @@ describe("PullCommand", () => {
     const gitAdapter = new GitAdapter(pullClaudefyDir);
     await gitAdapter.initStore(remoteDir);
     const manifest = JSON.parse(
-      await readFile(join(gitAdapter.getStorePath(), "manifest.json"), "utf-8")
+      await readFile(join(gitAdapter.getStorePath(), "manifest.json"), "utf-8"),
     );
 
     const machineB = manifest.machines.find((m: any) => m.machineId === "machine-b");

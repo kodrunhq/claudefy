@@ -69,9 +69,9 @@ export class MachineRegistry {
       return JSON.parse(raw);
     } catch (err) {
       if (err instanceof SyntaxError) {
-        throw new Error(
-          `Invalid manifest JSON in "${this.manifestPath}": ${err.message}`,
-        );
+        throw new Error(`Invalid manifest JSON in "${this.manifestPath}": ${err.message}`, {
+          cause: err,
+        });
       }
       throw err;
     }

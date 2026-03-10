@@ -46,10 +46,7 @@ export class InitCommand {
     await gitAdapter.initStore(options.backend);
 
     // 3. Write .gitattributes for LFS tracking of large session files
-    await writeFile(
-      join(gitAdapter.getStorePath(), ".gitattributes"),
-      LFS_GITATTRIBUTES
-    );
+    await writeFile(join(gitAdapter.getStorePath(), ".gitattributes"), LFS_GITATTRIBUTES);
 
     // 4. Run initial push
     const pushCommand = new PushCommand(this.homeDir);

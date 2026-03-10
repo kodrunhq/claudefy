@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { SecretScanner } from "../../src/secret-scanner/scanner.js";
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -21,7 +21,7 @@ describe("SecretScanner", () => {
     const file = join(tempDir, "settings.json");
     await writeFile(
       file,
-      JSON.stringify({ apiKey: "sk-ant-api03-reallyLongSecretKeyHere1234567890abcdef" })
+      JSON.stringify({ apiKey: "sk-ant-api03-reallyLongSecretKeyHere1234567890abcdef" }),
     );
 
     const results = await scanner.scanFile(file);
@@ -49,10 +49,7 @@ describe("SecretScanner", () => {
     const clean = join(tempDir, "clean.md");
     const dirty = join(tempDir, "dirty.json");
     await writeFile(clean, "no secrets here");
-    await writeFile(
-      dirty,
-      JSON.stringify({ token: "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12" })
-    );
+    await writeFile(dirty, JSON.stringify({ token: "ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef12" }));
 
     const results = await scanner.scanFiles([clean, dirty]);
     expect(results.length).toBeGreaterThan(0);

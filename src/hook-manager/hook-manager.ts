@@ -11,7 +11,11 @@ export class HookManager {
   async install(): Promise<void> {
     const settings = await this.loadSettings();
 
-    if (typeof settings.hooks !== "object" || settings.hooks === null || Array.isArray(settings.hooks)) {
+    if (
+      typeof settings.hooks !== "object" ||
+      settings.hooks === null ||
+      Array.isArray(settings.hooks)
+    ) {
       settings.hooks = {};
     }
 
@@ -51,7 +55,7 @@ export class HookManager {
       for (const event of Object.keys(settings.hooks)) {
         if (!Array.isArray(settings.hooks[event])) continue;
         settings.hooks[event] = settings.hooks[event].filter(
-          (h: any) => !this.isClaudefyHookEntry(h)
+          (h: any) => !this.isClaudefyHookEntry(h),
         );
         if (settings.hooks[event].length === 0) {
           delete settings.hooks[event];
@@ -69,12 +73,12 @@ export class HookManager {
     const settings = await this.loadSettings();
     if (!settings.hooks) return false;
 
-    const startHooks = Array.isArray(settings.hooks.SessionStart) ? settings.hooks.SessionStart : [];
+    const startHooks = Array.isArray(settings.hooks.SessionStart)
+      ? settings.hooks.SessionStart
+      : [];
     const endHooks = Array.isArray(settings.hooks.SessionEnd) ? settings.hooks.SessionEnd : [];
 
-    return (
-      this.hasClaudefyHook(startHooks) && this.hasClaudefyHook(endHooks)
-    );
+    return this.hasClaudefyHook(startHooks) && this.hasClaudefyHook(endHooks);
   }
 
   private hasClaudefyHook(hookArray: any[]): boolean {
@@ -97,7 +101,9 @@ export class HookManager {
         return JSON.parse(content);
       } catch (err) {
         if (err instanceof SyntaxError) {
-          throw new Error(`Invalid JSON in settings file "${this.settingsPath}": ${err.message}`);
+          throw new Error(`Invalid JSON in settings file "${this.settingsPath}": ${err.message}`, {
+            cause: err,
+          });
         }
         throw err;
       }

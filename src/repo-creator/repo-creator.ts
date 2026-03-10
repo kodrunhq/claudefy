@@ -13,15 +13,13 @@ export class RepoCreator {
   }
 
   async create(name: string, provider?: RepoProvider): Promise<string> {
-    const detected = provider || await this.detect();
+    const detected = provider || (await this.detect());
     if (!detected) {
       throw new Error("No supported CLI found. Install 'gh' (GitHub) or 'glab' (GitLab).");
     }
 
     if (detected === "github") {
-      const { stdout } = await execFileAsync("gh", [
-        "repo", "create", name, "--private", "--yes",
-      ]);
+      const { stdout } = await execFileAsync("gh", ["repo", "create", name, "--private", "--yes"]);
       // gh repo create outputs the URL
       const url = stdout.trim().split("\n").pop()?.trim();
       if (!url) throw new Error("Failed to parse repo URL from gh output");
@@ -30,7 +28,12 @@ export class RepoCreator {
 
     if (detected === "gitlab") {
       const { stdout } = await execFileAsync("glab", [
-        "project", "create", "--name", name, "--visibility", "private",
+        "project",
+        "create",
+        "--name",
+        name,
+        "--visibility",
+        "private",
       ]);
       const urlMatch = stdout.match(/https?:\/\/\S+/);
       if (!urlMatch) throw new Error("Failed to parse repo URL from glab output");

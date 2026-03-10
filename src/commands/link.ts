@@ -24,9 +24,14 @@ export class LinkCommand {
     await this.configManager.removeLink(alias);
   }
 
-  async list(): Promise<Record<string, { localPath: string; canonicalId: string; gitRemote: string | null }>> {
+  async list(): Promise<
+    Record<string, { localPath: string; canonicalId: string; gitRemote: string | null }>
+  > {
     const links = await this.configManager.getLinks();
-    const result: Record<string, { localPath: string; canonicalId: string; gitRemote: string | null }> = {};
+    const result: Record<
+      string,
+      { localPath: string; canonicalId: string; gitRemote: string | null }
+    > = {};
     for (const [alias, entry] of Object.entries(links)) {
       result[alias] = {
         localPath: entry.localPath,

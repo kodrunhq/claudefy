@@ -97,9 +97,9 @@ describe("ConfigManager", () => {
 
   it("throws on initialize when already initialized", async () => {
     await configManager.initialize("git@github.com:user/store.git");
-    await expect(
-      configManager.initialize("git@github.com:user/other.git")
-    ).rejects.toThrow("already initialized");
+    await expect(configManager.initialize("git@github.com:user/other.git")).rejects.toThrow(
+      "already initialized",
+    );
   });
 
   it("reports isInitialized correctly", async () => {
@@ -115,8 +115,8 @@ describe("ConfigManager", () => {
 
   it("throws on set with invalid key path", async () => {
     await configManager.initialize("git@github.com:user/store.git");
-    await expect(
-      configManager.set("nonexistent.key", "value")
-    ).rejects.toThrow('Invalid config key');
+    await expect(configManager.set("nonexistent.key", "value")).rejects.toThrow(
+      "Invalid config key",
+    );
   });
 });
