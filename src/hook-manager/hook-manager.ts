@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 
 export class HookManager {
   private settingsPath: string;
@@ -10,7 +11,9 @@ export class HookManager {
   async install(): Promise<void> {
     const settings = await this.loadSettings();
 
-    if (!settings.hooks) settings.hooks = {};
+    if (typeof settings.hooks !== "object" || settings.hooks === null || Array.isArray(settings.hooks)) {
+      settings.hooks = {};
+    }
 
     // SessionStart -> pull
     if (!Array.isArray(settings.hooks.SessionStart)) settings.hooks.SessionStart = [];
@@ -66,8 +69,8 @@ export class HookManager {
     const settings = await this.loadSettings();
     if (!settings.hooks) return false;
 
-    const startHooks = settings.hooks.SessionStart || [];
-    const endHooks = settings.hooks.SessionEnd || [];
+    const startHooks = Array.isArray(settings.hooks.SessionStart) ? settings.hooks.SessionStart : [];
+    const endHooks = Array.isArray(settings.hooks.SessionEnd) ? settings.hooks.SessionEnd : [];
 
     return (
       this.hasClaudefyHook(startHooks) && this.hasClaudefyHook(endHooks)
@@ -104,6 +107,7 @@ export class HookManager {
   }
 
   private async saveSettings(settings: any): Promise<void> {
+    await mkdir(dirname(this.settingsPath), { recursive: true });
     await writeFile(this.settingsPath, JSON.stringify(settings, null, 2));
   }
 }
