@@ -29,7 +29,8 @@ program
 program
   .command("init")
   .description("Initialize claudefy store on first machine")
-  .requiredOption("--backend <url>", "Git remote URL for store")
+  .option("--backend <url>", "Git remote URL for store")
+  .option("--create-repo", "Auto-create a GitHub/GitLab repo")
   .option("--hooks", "Install auto-sync hooks")
   .action(async function (this: Command, options) {
     try {
@@ -42,6 +43,7 @@ program
         skipEncryption: global.skipEncryption,
         passphrase: global.passphrase,
         installHooks: options.hooks ?? false,
+        createRepo: options.createRepo ?? false,
       });
     } catch (err: any) {
       output.error(err.message);
