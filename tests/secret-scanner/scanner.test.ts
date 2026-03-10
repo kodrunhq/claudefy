@@ -45,6 +45,32 @@ describe("SecretScanner", () => {
     expect(results.length).toBe(0);
   });
 
+  it("does not flag long alphanumeric strings or base64 content", async () => {
+    const file = join(tempDir, "history.jsonl");
+    await writeFile(
+      file,
+      JSON.stringify({
+        id: "a".repeat(64),
+        hash: "abc123def456abc123def456abc123def456abc123def456",
+        data: "SGVsbG8gV29ybGQgdGhpcyBpcyBhIGxvbmcgYmFzZTY0IHN0cmluZw==",
+        path: "/home/user/.claude/projects/-home-user-develop-myproject/settings.json",
+      }),
+    );
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBe(0);
+  });
+
+  it("does not double-flag Anthropic keys as OpenAI keys", async () => {
+    const file = join(tempDir, "config.json");
+    await writeFile(
+      file,
+      JSON.stringify({ key: "sk-ant-api03-reallyLongSecretKeyHere1234567890abcdef" }),
+    );
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBe(1);
+    expect(results[0].pattern).toBe("Anthropic API Key");
+  });
+
   it("scans multiple files", async () => {
     const clean = join(tempDir, "clean.md");
     const dirty = join(tempDir, "dirty.json");
