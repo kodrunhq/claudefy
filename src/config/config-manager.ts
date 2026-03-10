@@ -41,10 +41,6 @@ export class ConfigManager {
         useKeychain: false,
         cacheDuration: "0",
       },
-      sync: {
-        lfsThreshold: 512 * 1024, // 512KB
-      },
-      filter: {},
       machineId,
     };
 

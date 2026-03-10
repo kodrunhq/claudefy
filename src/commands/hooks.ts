@@ -2,24 +2,21 @@ import { join } from "node:path";
 import { HookManager } from "../hook-manager/hook-manager.js";
 
 export class HooksCommand {
-  private homeDir: string;
+  private hookManager: HookManager;
 
   constructor(homeDir: string) {
-    this.homeDir = homeDir;
+    this.hookManager = new HookManager(join(homeDir, ".claude", "settings.json"));
   }
 
   async install(): Promise<void> {
-    const hookManager = new HookManager(join(this.homeDir, ".claude", "settings.json"));
-    await hookManager.install();
+    await this.hookManager.install();
   }
 
   async remove(): Promise<void> {
-    const hookManager = new HookManager(join(this.homeDir, ".claude", "settings.json"));
-    await hookManager.remove();
+    await this.hookManager.remove();
   }
 
   async isInstalled(): Promise<boolean> {
-    const hookManager = new HookManager(join(this.homeDir, ".claude", "settings.json"));
-    return hookManager.isInstalled();
+    return this.hookManager.isInstalled();
   }
 }

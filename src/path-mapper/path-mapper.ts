@@ -33,25 +33,33 @@ export class PathMapper {
   }
 
   normalizeJsonlLine(line: string): string {
-    const obj = JSON.parse(line);
-    if (obj.project) {
-      obj.project = this.normalizePathField(obj.project);
+    try {
+      const obj = JSON.parse(line);
+      if (obj.project) {
+        obj.project = this.normalizePathField(obj.project);
+      }
+      if (obj.cwd) {
+        obj.cwd = this.normalizePathField(obj.cwd);
+      }
+      return JSON.stringify(obj);
+    } catch {
+      return line;
     }
-    if (obj.cwd) {
-      obj.cwd = this.normalizePathField(obj.cwd);
-    }
-    return JSON.stringify(obj);
   }
 
   remapJsonlLine(line: string): string {
-    const obj = JSON.parse(line);
-    if (obj.project) {
-      obj.project = this.remapPathField(obj.project);
+    try {
+      const obj = JSON.parse(line);
+      if (obj.project) {
+        obj.project = this.remapPathField(obj.project);
+      }
+      if (obj.cwd) {
+        obj.cwd = this.remapPathField(obj.cwd);
+      }
+      return JSON.stringify(obj);
+    } catch {
+      return line;
     }
-    if (obj.cwd) {
-      obj.cwd = this.remapPathField(obj.cwd);
-    }
-    return JSON.stringify(obj);
   }
 
   normalizeSettingsPaths<T>(settings: T, claudeDir: string): T {

@@ -37,7 +37,7 @@
     "README.md",
     "LICENSE"
   ],
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/kodrunhq/claudefy/issues"
   },

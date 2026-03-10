@@ -35,14 +35,7 @@ export class StatusCommand {
     }
 
     const config = await configManager.load();
-    const syncFilterConfig = await configManager.getSyncFilter();
-    const syncFilter = new SyncFilter(syncFilterConfig);
     const claudeDir = join(this.homeDir, ".claude");
-
-    let localFiles: string[] = [];
-    if (existsSync(claudeDir)) {
-      localFiles = await readdir(claudeDir);
-    }
 
     if (!existsSync(claudeDir)) {
       return {
@@ -56,6 +49,9 @@ export class StatusCommand {
       };
     }
 
+    const syncFilterConfig = await configManager.getSyncFilter();
+    const syncFilter = new SyncFilter(syncFilterConfig);
+    const localFiles = await readdir(claudeDir);
     const classification = await syncFilter.classify(claudeDir);
 
     return {
