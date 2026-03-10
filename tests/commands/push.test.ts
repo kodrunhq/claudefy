@@ -158,8 +158,15 @@ describe("PushCommand", () => {
     await rm(verifyDir, { recursive: true, force: true });
   });
 
-  it("encrypts sensitive files when encryption is enabled", async () => {
-    // Update config to enable encryption
+  it("encrypts files containing secrets when encryption is enabled", async () => {
+    // Add a file with a secret
+    await mkdir(join(claudeDir, "projects"), { recursive: true });
+    await writeFile(
+      join(claudeDir, "projects", "session.jsonl"),
+      '{"msg": "key is sk-ant-ABCDEFGHIJKLMNOPQRSTUVWX"}',
+    );
+
+    // Update config to enable encryption and allowlist projects
     await writeFile(
       join(claudefyDir, "config.json"),
       JSON.stringify({
@@ -171,6 +178,13 @@ describe("PushCommand", () => {
         machineId: "test-machine-enc",
       }),
     );
+    await writeFile(
+      join(claudefyDir, "sync-filter.json"),
+      JSON.stringify({
+        allowlist: ["commands", "agents", "settings.json", "projects"],
+        denylist: ["cache"],
+      }),
+    );
 
     const push = new PushCommand(homeDir);
     await push.execute({ quiet: true, passphrase: "test-secret-pass" });
@@ -179,17 +193,19 @@ describe("PushCommand", () => {
     await simpleGit(verifyDir).clone(remoteDir, "store");
     const storePath = join(verifyDir, "store");
 
-    // settings.json should be encrypted as settings.json.age
-    expect(existsSync(join(storePath, "config", "settings.json.age"))).toBe(true);
-    expect(existsSync(join(storePath, "config", "settings.json"))).toBe(false);
+    // File with secret should be encrypted
+    expect(existsSync(join(storePath, "config", "projects", "session.jsonl.age"))).toBe(true);
+    expect(existsSync(join(storePath, "config", "projects", "session.jsonl"))).toBe(false);
 
-    // Unknown files should also be encrypted
-    expect(existsSync(join(storePath, "unknown", "get-shit-done", "VERSION.age"))).toBe(true);
-    expect(existsSync(join(storePath, "unknown", "get-shit-done", "VERSION"))).toBe(false);
+    // File without secrets should remain plaintext
+    expect(existsSync(join(storePath, "config", "settings.json"))).toBe(true);
+    expect(existsSync(join(storePath, "config", "settings.json.age"))).toBe(false);
 
     // Encrypted content should not be readable as plaintext
-    const encryptedContent = await readFile(join(storePath, "config", "settings.json.age"));
-    expect(encryptedContent.toString()).not.toContain('"key"');
+    const encryptedContent = await readFile(
+      join(storePath, "config", "projects", "session.jsonl.age"),
+    );
+    expect(encryptedContent.toString()).not.toContain("sk-ant-");
 
     await rm(verifyDir, { recursive: true, force: true });
   });
