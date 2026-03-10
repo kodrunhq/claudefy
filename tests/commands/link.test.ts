@@ -8,14 +8,16 @@ import { simpleGit } from "simple-git";
 
 describe("LinkCommand", () => {
   let homeDir: string;
+  let remoteDir: string;
   let projectDir: string;
+  const extraDirs: string[] = [];
 
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-link-test-"));
 
     // Initialize claudefy config
     const configManager = new ConfigManager(homeDir);
-    const remoteDir = await mkdtemp(join(tmpdir(), "claudefy-link-remote-"));
+    remoteDir = await mkdtemp(join(tmpdir(), "claudefy-link-remote-"));
     await simpleGit(remoteDir).init(true);
     await configManager.initialize(remoteDir);
 
@@ -28,7 +30,12 @@ describe("LinkCommand", () => {
 
   afterEach(async () => {
     await rm(homeDir, { recursive: true, force: true });
+    await rm(remoteDir, { recursive: true, force: true });
     await rm(projectDir, { recursive: true, force: true });
+    for (const dir of extraDirs) {
+      await rm(dir, { recursive: true, force: true });
+    }
+    extraDirs.length = 0;
   });
 
   it("adds a link", async () => {
@@ -61,6 +68,7 @@ describe("LinkCommand", () => {
 
     // Create a second project directory
     const projectDir2 = await mkdtemp(join(tmpdir(), "claudefy-link-project2-"));
+    extraDirs.push(projectDir2);
     const git2 = simpleGit(projectDir2);
     await git2.init();
     await git2.addRemote("origin", "https://github.com/test/other-project.git");
@@ -74,7 +82,5 @@ describe("LinkCommand", () => {
     expect(links["project-two"]).toBeDefined();
     expect(links["project-one"].localPath).toBe(projectDir);
     expect(links["project-two"].localPath).toBe(projectDir2);
-
-    await rm(projectDir2, { recursive: true, force: true });
   });
 });

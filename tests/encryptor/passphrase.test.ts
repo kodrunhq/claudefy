@@ -22,8 +22,8 @@ describe("resolvePassphrase", () => {
     expect(result).toBeNull();
   });
 
-  it("returns null when useKeychain is false and no env", async () => {
-    vi.stubEnv("CLAUDEFY_PASSPHRASE", "");
+  it("returns null when useKeychain is false and env var is unset", async () => {
+    delete process.env.CLAUDEFY_PASSPHRASE;
 
     const result = await resolvePassphrase(false);
     expect(result).toBeNull();

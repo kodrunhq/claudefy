@@ -78,9 +78,7 @@ export class PullCommand {
     // 3. Decrypt .age files if encryption is enabled
     if (config.encryption.enabled && !options.skipEncryption) {
       if (!options.passphrase) {
-        throw new Error(
-          "Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.",
-        );
+        throw new Error("Encryption is enabled but CLAUDEFY_PASSPHRASE env var is not set.");
       }
 
       const encryptor = new Encryptor(options.passphrase);
@@ -152,7 +150,7 @@ export class PullCommand {
         if (localName) {
           const destPath = resolve(join(projectsDir, localName));
           // Path containment: ensure renamed dir stays within projects/
-          if (!destPath.startsWith(resolve(projectsDir))) {
+          if (!destPath.startsWith(resolve(projectsDir) + "/")) {
             console.warn(
               `Skipping directory rename "${dirName}" → "${localName}": path escapes projects directory`,
             );

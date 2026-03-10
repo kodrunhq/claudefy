@@ -12,12 +12,14 @@ const homeDir = homedir();
 function getGlobalOpts(cmd: Command): {
   quiet: boolean;
   skipEncryption: boolean;
+  skipSecretScan: boolean;
   passphrase?: string;
 } {
   const opts = cmd.optsWithGlobals();
   return {
     quiet: opts.quiet ?? false,
     skipEncryption: opts.skipEncryption ?? false,
+    skipSecretScan: opts.skipSecretScan ?? false,
     passphrase: process.env.CLAUDEFY_PASSPHRASE,
   };
 }
@@ -27,7 +29,8 @@ program
   .description("Sync your Claude Code environment across machines")
   .version(pkg.version)
   .option("-q, --quiet", "Suppress output")
-  .option("--skip-encryption", "Skip encryption");
+  .option("--skip-encryption", "Skip encryption")
+  .option("--skip-secret-scan", "Skip secret scanning on push");
 
 program
   .command("init")
@@ -88,6 +91,7 @@ program
       await cmd.execute({
         quiet: global.quiet,
         skipEncryption: global.skipEncryption,
+        skipSecretScan: global.skipSecretScan,
         passphrase: global.passphrase,
       });
     } catch (err: unknown) {

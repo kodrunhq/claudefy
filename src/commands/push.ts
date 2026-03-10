@@ -14,6 +14,7 @@ import { output } from "../output.js";
 export interface PushOptions {
   quiet: boolean;
   skipEncryption?: boolean;
+  skipSecretScan?: boolean;
   passphrase?: string;
 }
 
@@ -140,7 +141,7 @@ export class PushCommand {
     }
 
     // 7. Scan for secrets before committing
-    if (!options.skipEncryption) {
+    if (!options.skipSecretScan) {
       const scanner = new SecretScanner();
       const filesToScan = await this.collectFiles(configDir);
       const unknownFiles = await this.collectFiles(unknownDir);
@@ -149,7 +150,7 @@ export class PushCommand {
       if (findings.length > 0) {
         const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
         throw new Error(
-          `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nAborting push. Use --skip-encryption to bypass scanning.`,
+          `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nAborting push. Use --skip-secret-scan to bypass scanning.`,
         );
       }
     }
