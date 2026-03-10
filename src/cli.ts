@@ -238,6 +238,33 @@ configCmd
     }
   });
 
+program
+  .command("doctor")
+  .description("Diagnose sync health")
+  .action(async () => {
+    try {
+      const { DoctorCommand } = await import("./commands/doctor.js");
+      const cmd = new DoctorCommand(homeDir);
+      const checks = await cmd.execute();
+      for (const check of checks) {
+        if (check.status === "pass") {
+          output.success(`${check.name}: ${check.detail}`);
+        } else if (check.status === "warn") {
+          output.warn(`${check.name}: ${check.detail}`);
+        } else {
+          output.error(`${check.name}: ${check.detail}`);
+        }
+      }
+      const failures = checks.filter((c) => c.status === "fail");
+      if (failures.length > 0) {
+        process.exit(1);
+      }
+    } catch (err: any) {
+      output.error(err.message);
+      process.exit(1);
+    }
+  });
+
 const hooksCmd = program
   .command("hooks")
   .description("Manage auto-sync hooks");
