@@ -78,7 +78,9 @@ export class PullCommand {
     // 3. Decrypt .age files if encryption is enabled
     if (config.encryption.enabled && !options.skipEncryption) {
       if (!options.passphrase) {
-        throw new Error("Encryption is enabled but CLAUDEFY_PASSPHRASE env var is not set.");
+        throw new Error(
+          "Encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+        );
       }
 
       const encryptor = new Encryptor(options.passphrase);

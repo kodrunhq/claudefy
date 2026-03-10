@@ -1,7 +1,11 @@
 import { Command } from "commander";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { output } from "./output.js";
+import { resolvePassphrase } from "./encryptor/passphrase.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
@@ -9,19 +13,37 @@ const pkg = require("../package.json") as { version: string };
 const program = new Command();
 const homeDir = homedir();
 
-function getGlobalOpts(cmd: Command): {
+async function getGlobalOpts(cmd: Command): Promise<{
   quiet: boolean;
   skipEncryption: boolean;
   skipSecretScan: boolean;
   passphrase?: string;
-} {
+}> {
   const opts = cmd.optsWithGlobals();
-  return {
-    quiet: opts.quiet ?? false,
-    skipEncryption: opts.skipEncryption ?? false,
-    skipSecretScan: opts.skipSecretScan ?? false,
-    passphrase: process.env.CLAUDEFY_PASSPHRASE,
-  };
+  const quiet = opts.quiet ?? false;
+  const skipEncryption = opts.skipEncryption ?? false;
+  const skipSecretScan = opts.skipSecretScan ?? false;
+
+  // Resolve passphrase: env var -> OS keychain (only if config exists and opts in)
+  let passphrase: string | undefined;
+  if (!skipEncryption) {
+    let useKeychain = false;
+    const configPath = join(homeDir, ".claudefy", "config.json");
+    if (existsSync(configPath)) {
+      try {
+        const config = JSON.parse(await readFile(configPath, "utf-8"));
+        useKeychain = config.encryption?.useKeychain ?? false;
+      } catch {
+        // Config unreadable, fall through with useKeychain=false
+      }
+    }
+    const result = await resolvePassphrase(useKeychain);
+    if (result) {
+      passphrase = result.passphrase;
+    }
+  }
+
+  return { quiet, skipEncryption, skipSecretScan, passphrase };
 }
 
 program
@@ -40,7 +62,7 @@ program
   .option("--hooks", "Install auto-sync hooks")
   .action(async function (this: Command, options) {
     try {
-      const global = getGlobalOpts(this);
+      const global = await getGlobalOpts(this);
       const { InitCommand } = await import("./commands/init.js");
       const cmd = new InitCommand(homeDir);
       await cmd.execute({
@@ -64,7 +86,7 @@ program
   .option("--hooks", "Install auto-sync hooks")
   .action(async function (this: Command, options) {
     try {
-      const global = getGlobalOpts(this);
+      const global = await getGlobalOpts(this);
       const { JoinCommand } = await import("./commands/join.js");
       const cmd = new JoinCommand(homeDir);
       await cmd.execute({
@@ -85,7 +107,7 @@ program
   .description("Push local state to remote store")
   .action(async function (this: Command) {
     try {
-      const global = getGlobalOpts(this);
+      const global = await getGlobalOpts(this);
       const { PushCommand } = await import("./commands/push.js");
       const cmd = new PushCommand(homeDir);
       await cmd.execute({
@@ -105,7 +127,7 @@ program
   .description("Pull remote state to local machine")
   .action(async function (this: Command) {
     try {
-      const global = getGlobalOpts(this);
+      const global = await getGlobalOpts(this);
       const { PullCommand } = await import("./commands/pull.js");
       const cmd = new PullCommand(homeDir);
       await cmd.execute({
@@ -125,7 +147,7 @@ program
   .option("--confirm", "Confirm destructive override")
   .action(async function (this: Command, options) {
     try {
-      const global = getGlobalOpts(this);
+      const global = await getGlobalOpts(this);
       const { OverrideCommand } = await import("./commands/override.js");
       const cmd = new OverrideCommand(homeDir);
       await cmd.execute({
