@@ -15,7 +15,7 @@ claudefy syncs your `~/.claude` directory (commands, skills, agents, hooks, rule
 ## Install
 
 ```bash
-npm install -g claudefy
+npm install -g @kodrunhq/claudefy
 ```
 
 ## Quick Start

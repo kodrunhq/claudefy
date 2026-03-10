@@ -19,7 +19,7 @@ export class RepoCreator {
     }
 
     if (detected === "github") {
-      const { stdout } = await execFileAsync("gh", ["repo", "create", name, "--private", "--yes"]);
+      const { stdout } = await execFileAsync("gh", ["repo", "create", name, "--private"]);
       // gh repo create outputs the URL
       const url = stdout.trim().split("\n").pop()?.trim();
       if (!url) throw new Error("Failed to parse repo URL from gh output");
