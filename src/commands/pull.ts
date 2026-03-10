@@ -266,5 +266,4 @@ export class PullCommand {
 
     return result;
   }
-
 }

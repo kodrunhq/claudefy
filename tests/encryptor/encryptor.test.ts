@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { Encryptor } from "../../src/encryptor/encryptor.js";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 
 describe("Encryptor", () => {
   let tempDir: string;
@@ -50,5 +51,44 @@ describe("Encryptor", () => {
 
     const encrypted = await encryptor1.encryptString("secret");
     await expect(encryptor2.decryptString(encrypted)).rejects.toThrow();
+  });
+
+  it("encrypts and decrypts a directory recursively", { timeout: 15_000 }, async () => {
+    const encryptor = new Encryptor(passphrase);
+    const subDir = join(tempDir, "sub");
+    await mkdir(subDir, { recursive: true });
+    await writeFile(join(tempDir, "a.txt"), "file-a");
+    await writeFile(join(subDir, "b.txt"), "file-b");
+
+    await encryptor.encryptDirectory(tempDir);
+
+    // Plaintext files should be replaced with .age files
+    expect(existsSync(join(tempDir, "a.txt"))).toBe(false);
+    expect(existsSync(join(tempDir, "a.txt.age"))).toBe(true);
+    expect(existsSync(join(subDir, "b.txt"))).toBe(false);
+    expect(existsSync(join(subDir, "b.txt.age"))).toBe(true);
+
+    await encryptor.decryptDirectory(tempDir);
+
+    // .age files should be replaced with plaintext
+    expect(existsSync(join(tempDir, "a.txt.age"))).toBe(false);
+    expect(await readFile(join(tempDir, "a.txt"), "utf-8")).toBe("file-a");
+    expect(existsSync(join(subDir, "b.txt.age"))).toBe(false);
+    expect(await readFile(join(subDir, "b.txt"), "utf-8")).toBe("file-b");
+  });
+
+  it("skips symlinks in directory encryption/decryption", { timeout: 15_000 }, async () => {
+    const encryptor = new Encryptor(passphrase);
+    await writeFile(join(tempDir, "real.txt"), "real-content");
+    await symlink(join(tempDir, "real.txt"), join(tempDir, "link.txt"));
+
+    await encryptor.encryptDirectory(tempDir);
+
+    // real.txt should be encrypted, symlink should be untouched
+    expect(existsSync(join(tempDir, "real.txt.age"))).toBe(true);
+    expect(existsSync(join(tempDir, "real.txt"))).toBe(false);
+    // Symlink target is gone, but the symlink entry itself should still exist
+    const entries = await readdir(tempDir);
+    expect(entries).not.toContain("link.txt.age");
   });
 });

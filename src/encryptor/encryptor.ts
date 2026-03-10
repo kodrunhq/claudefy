@@ -43,6 +43,7 @@ export class Encryptor {
   async encryptDirectory(dirPath: string): Promise<void> {
     const entries = await readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
       const fullPath = join(dirPath, entry.name);
       if (entry.isDirectory()) {
         await this.encryptDirectory(fullPath);
@@ -56,6 +57,7 @@ export class Encryptor {
   async decryptDirectory(dirPath: string): Promise<void> {
     const entries = await readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
       const fullPath = join(dirPath, entry.name);
       if (entry.isDirectory()) {
         await this.decryptDirectory(fullPath);
