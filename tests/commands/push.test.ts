@@ -209,4 +209,92 @@ describe("PushCommand", () => {
 
     await rm(verifyDir, { recursive: true, force: true });
   });
+
+  it("second push with no changes produces no commit", async () => {
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    // Get commit count after first push
+    const storePath = join(homeDir, ".claudefy", "store");
+    const git = simpleGit(storePath);
+    const log1 = await git.log();
+    const count1 = log1.total;
+
+    // Push again with same content
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    const log2 = await git.log();
+    const count2 = log2.total;
+
+    expect(count2).toBe(count1);
+  });
+
+  it("detects deleted files (file removed from ~/.claude is removed from store)", async () => {
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    // Verify file exists in remote
+    const verifyDir1 = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir1).clone(remoteDir, "store");
+    expect(existsSync(join(verifyDir1, "store", "config", "agents", "my-agent.md"))).toBe(true);
+    await rm(verifyDir1, { recursive: true, force: true });
+
+    // Delete a file from ~/.claude
+    await rm(join(claudeDir, "agents", "my-agent.md"));
+
+    // Push again
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    // Verify file is gone from remote
+    const verifyDir2 = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir2).clone(remoteDir, "store");
+    expect(existsSync(join(verifyDir2, "store", "config", "agents", "my-agent.md"))).toBe(false);
+    await rm(verifyDir2, { recursive: true, force: true });
+  });
+
+  it("manifest only updates when there are real changes", async () => {
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    // Read manifest after first push
+    const verifyDir1 = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir1).clone(remoteDir, "store");
+    const manifest1 = JSON.parse(
+      await readFile(join(verifyDir1, "store", "manifest.json"), "utf-8"),
+    );
+    const lastSeen1 = manifest1.machines[0].lastSeen;
+    await rm(verifyDir1, { recursive: true, force: true });
+
+    // Wait a small bit so timestamps would differ
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Push again with no changes
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    // Read manifest after second push — lastSeen should NOT have changed
+    const verifyDir2 = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir2).clone(remoteDir, "store");
+    const manifest2 = JSON.parse(
+      await readFile(join(verifyDir2, "store", "manifest.json"), "utf-8"),
+    );
+    const lastSeen2 = manifest2.machines[0].lastSeen;
+    await rm(verifyDir2, { recursive: true, force: true });
+
+    expect(lastSeen2).toBe(lastSeen1);
+  });
+
+  it("uses per-machine branches", async () => {
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    // Verify machine branch exists on remote
+    const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    const git = simpleGit(verifyDir);
+    const refs = await git.listRemote(["--heads", remoteDir]);
+    expect(refs).toContain("machines/test-machine-abc");
+    // main should also be updated
+    expect(refs).toContain("main");
+
+    await rm(verifyDir, { recursive: true, force: true });
+  });
 });

@@ -135,6 +135,13 @@ export class GitAdapter {
     return result;
   }
 
+  async isClean(): Promise<boolean> {
+    this.ensureInitialized();
+    await this.git!.add(".");
+    const status = await this.git!.status();
+    return status.isClean();
+  }
+
   async pull(): Promise<void> {
     this.ensureInitialized();
     await this.git!.pull();
