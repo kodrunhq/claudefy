@@ -104,14 +104,22 @@ export async function promptPassphraseSetup(): Promise<PassphraseSetupResult | n
     return null;
   }
 
-  const passphrase = await prompt("Enter encryption passphrase: ", true);
-  if (!passphrase) {
-    return null;
-  }
+  let passphrase: string;
+  while (true) {
+    const entered = await prompt("Enter encryption passphrase: ", true);
+    if (!entered.trim()) {
+      console.log("Passphrase cannot be empty. Please try again.");
+      continue;
+    }
 
-  const confirm = await prompt("Confirm passphrase: ", true);
-  if (passphrase !== confirm) {
-    throw new Error("Passphrases do not match.");
+    const confirm = await prompt("Confirm passphrase: ", true);
+    if (entered !== confirm) {
+      console.log("Passphrases do not match. Please try again.");
+      continue;
+    }
+
+    passphrase = entered;
+    break;
   }
 
   let storedInKeychain = false;

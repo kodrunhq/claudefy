@@ -1,6 +1,9 @@
 import { Command } from "commander";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { output } from "./output.js";
 import { resolvePassphrase } from "./encryptor/passphrase.js";
 
@@ -21,10 +24,20 @@ async function getGlobalOpts(cmd: Command): Promise<{
   const skipEncryption = opts.skipEncryption ?? false;
   const skipSecretScan = opts.skipSecretScan ?? false;
 
-  // Resolve passphrase: env var -> OS keychain
+  // Resolve passphrase: env var -> OS keychain (only if config exists and opts in)
   let passphrase: string | undefined;
   if (!skipEncryption) {
-    const result = await resolvePassphrase(true);
+    let useKeychain = false;
+    const configPath = join(homeDir, ".claudefy", "config.json");
+    if (existsSync(configPath)) {
+      try {
+        const config = JSON.parse(await readFile(configPath, "utf-8"));
+        useKeychain = config.encryption?.useKeychain ?? false;
+      } catch {
+        // Config unreadable, fall through with useKeychain=false
+      }
+    }
+    const result = await resolvePassphrase(useKeychain);
     if (result) {
       passphrase = result.passphrase;
     }
