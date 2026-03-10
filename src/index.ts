@@ -5,8 +5,16 @@ import { program } from "./cli.js";
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
 
-// Check for updates (non-blocking, cached for 1 day)
-const updateNotifier = (await import("update-notifier")).default;
-updateNotifier({ pkg }).notify();
+// Non-blocking update check (cached for 1 day)
+const isQuiet =
+  process.argv.includes("-q") || process.argv.includes("--quiet");
+
+if (process.stdout.isTTY && !isQuiet) {
+  import("update-notifier")
+    .then(({ default: updateNotifier }) => {
+      updateNotifier({ pkg }).notify();
+    })
+    .catch(() => {});
+}
 
 program.parse();
