@@ -35,6 +35,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Configure git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Run tests
         run: npx vitest run
 
@@ -49,15 +54,8 @@ jobs:
           claudefy --version
           claudefy --help
 
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Bump version
-        env:
-          VERSION_BUMP: ${{ inputs.version_bump }}
-        run: npm version "$VERSION_BUMP" -m "release: v%s"
+        run: npm version "${{ inputs.version_bump }}" -m "release: v%s"
 
       - name: Push tag
         run: git push --follow-tags
