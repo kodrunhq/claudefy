@@ -61,8 +61,14 @@ export class ConfigManager {
   }
 
   async set(key: string, value: unknown): Promise<void> {
-    const config = await this.load();
+    const FORBIDDEN_KEYS = ["__proto__", "prototype", "constructor"];
     const parts = key.split(".");
+    for (const part of parts) {
+      if (FORBIDDEN_KEYS.includes(part)) {
+        throw new Error(`Forbidden config key segment: "${part}"`);
+      }
+    }
+    const config = await this.load();
     let obj: Record<string, unknown> = config as unknown as Record<string, unknown>;
     for (let i = 0; i < parts.length - 1; i++) {
       const next = obj[parts[i]];
