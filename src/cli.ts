@@ -1,6 +1,10 @@
 import { Command } from "commander";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { output } from "./output.js";
+
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json") as { version: string };
 
 const program = new Command();
 const homeDir = homedir();
@@ -8,26 +12,25 @@ const homeDir = homedir();
 function getGlobalOpts(cmd: Command): {
   quiet: boolean;
   skipEncryption: boolean;
+  skipSecretScan: boolean;
   passphrase?: string;
 } {
   const opts = cmd.optsWithGlobals();
   return {
     quiet: opts.quiet ?? false,
     skipEncryption: opts.skipEncryption ?? false,
-    passphrase: opts.passphrase ?? process.env.CLAUDEFY_PASSPHRASE,
+    skipSecretScan: opts.skipSecretScan ?? false,
+    passphrase: process.env.CLAUDEFY_PASSPHRASE,
   };
 }
 
 program
   .name("claudefy")
   .description("Sync your Claude Code environment across machines")
-  .version("0.1.0")
+  .version(pkg.version)
   .option("-q, --quiet", "Suppress output")
   .option("--skip-encryption", "Skip encryption")
-  .option(
-    "--passphrase <passphrase>",
-    "Encryption passphrase (prefer CLAUDEFY_PASSPHRASE env var to avoid process list exposure)",
-  );
+  .option("--skip-secret-scan", "Skip secret scanning on push");
 
 program
   .command("init")
@@ -48,8 +51,8 @@ program
         installHooks: options.hooks ?? false,
         createRepo: options.createRepo ?? false,
       });
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -71,8 +74,8 @@ program
         passphrase: global.passphrase,
         installHooks: options.hooks ?? false,
       });
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -88,10 +91,11 @@ program
       await cmd.execute({
         quiet: global.quiet,
         skipEncryption: global.skipEncryption,
+        skipSecretScan: global.skipSecretScan,
         passphrase: global.passphrase,
       });
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -109,8 +113,8 @@ program
         skipEncryption: global.skipEncryption,
         passphrase: global.passphrase,
       });
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -130,8 +134,8 @@ program
         passphrase: global.passphrase,
         confirm: options.confirm ?? false,
       });
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -145,8 +149,8 @@ program
       const cmd = new StatusCommand(homeDir);
       const result = await cmd.execute();
       console.log(JSON.stringify(result, null, 2));
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -159,8 +163,8 @@ program
       const { LinkCommand } = await import("./commands/link.js");
       const cmd = new LinkCommand(homeDir);
       await cmd.add(alias, localPath);
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -173,8 +177,8 @@ program
       const { LinkCommand } = await import("./commands/link.js");
       const cmd = new LinkCommand(homeDir);
       await cmd.remove(alias);
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -188,8 +192,8 @@ program
       const cmd = new LinkCommand(homeDir);
       const links = await cmd.list();
       console.log(JSON.stringify(links, null, 2));
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -203,8 +207,8 @@ program
       const cmd = new MachinesCommand(homeDir);
       const machines = await cmd.execute();
       console.log(JSON.stringify(machines, null, 2));
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -220,8 +224,8 @@ configCmd
       const cmd = new ConfigCommand(homeDir);
       const result = await cmd.get(key);
       console.log(typeof result === "object" ? JSON.stringify(result, null, 2) : String(result));
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -235,8 +239,8 @@ configCmd
       const cmd = new ConfigCommand(homeDir);
       await cmd.set(key, value);
       output.success(`Set ${key}`);
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -262,8 +266,8 @@ program
       if (failures.length > 0) {
         process.exit(1);
       }
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -278,8 +282,8 @@ hooksCmd
       const { HooksCommand } = await import("./commands/hooks.js");
       const cmd = new HooksCommand(homeDir);
       await cmd.install();
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });
@@ -292,8 +296,8 @@ hooksCmd
       const { HooksCommand } = await import("./commands/hooks.js");
       const cmd = new HooksCommand(homeDir);
       await cmd.remove();
-    } catch (err: any) {
-      output.error(err.message);
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
     }
   });

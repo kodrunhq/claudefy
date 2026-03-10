@@ -132,8 +132,8 @@ describe("PullCommand", () => {
     expect(settings.theme).toBe("dark");
     // Local "editor" key preserved
     expect(settings.editor).toBe("vim");
-    // Remote hooks preserved
-    expect(settings.hooks).toBeDefined();
+    // Remote hooks are stripped for security (prevents hook injection)
+    expect(settings.hooks).toBeUndefined();
   });
 
   it("detects override marker and creates backup", async () => {

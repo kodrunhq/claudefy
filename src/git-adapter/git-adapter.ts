@@ -1,5 +1,5 @@
 import { simpleGit, SimpleGit } from "simple-git";
-import { readFile, writeFile, rm, mkdir } from "node:fs/promises";
+import { readFile, writeFile, rm, mkdir, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -96,8 +96,7 @@ export class GitAdapter {
 
   async wipeAndPush(machineId: string): Promise<void> {
     this.ensureInitialized();
-    const { readdirSync } = await import("node:fs");
-    const entries = readdirSync(this.storePath);
+    const entries = await readdir(this.storePath);
     for (const entry of entries) {
       if (entry === ".git") continue;
       await rm(join(this.storePath, entry), { recursive: true, force: true });

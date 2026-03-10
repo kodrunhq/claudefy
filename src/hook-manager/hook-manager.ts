@@ -1,6 +1,21 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
+interface HookEntry {
+  type: string;
+  command: string;
+}
+
+interface HookEventConfig {
+  hooks: HookEntry[];
+  matcher?: string;
+}
+
+interface ClaudeSettings {
+  hooks?: Record<string, HookEventConfig[]>;
+  [key: string]: unknown;
+}
+
 export class HookManager {
   private settingsPath: string;
 
@@ -55,7 +70,7 @@ export class HookManager {
       for (const event of Object.keys(settings.hooks)) {
         if (!Array.isArray(settings.hooks[event])) continue;
         settings.hooks[event] = settings.hooks[event].filter(
-          (h: any) => !this.isClaudefyHookEntry(h),
+          (h: HookEventConfig) => !this.isClaudefyHookEntry(h),
         );
         if (settings.hooks[event].length === 0) {
           delete settings.hooks[event];
@@ -81,19 +96,19 @@ export class HookManager {
     return this.hasClaudefyHook(startHooks) && this.hasClaudefyHook(endHooks);
   }
 
-  private hasClaudefyHook(hookArray: any[]): boolean {
+  private hasClaudefyHook(hookArray: HookEventConfig[]): boolean {
     return hookArray.some((h) => this.isClaudefyHookEntry(h));
   }
 
-  private isClaudefyHookEntry(hookEntry: any): boolean {
+  private isClaudefyHookEntry(hookEntry: HookEventConfig): boolean {
     if (!Array.isArray(hookEntry.hooks)) return false;
-    return hookEntry.hooks.some((h: any) => {
+    return hookEntry.hooks.some((h: HookEntry) => {
       const command = typeof h.command === "string" ? h.command.trim() : "";
       return command.startsWith("claudefy pull") || command.startsWith("claudefy push");
     });
   }
 
-  private async loadSettings(): Promise<any> {
+  private async loadSettings(): Promise<ClaudeSettings> {
     try {
       const content = await readFile(this.settingsPath, "utf-8");
       if (content.trim() === "") return {};
@@ -108,14 +123,14 @@ export class HookManager {
         throw err;
       }
     } catch (err: unknown) {
-      if (typeof err === "object" && err !== null && (err as any).code === "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return {};
       }
       throw err;
     }
   }
 
-  private async saveSettings(settings: any): Promise<void> {
+  private async saveSettings(settings: ClaudeSettings): Promise<void> {
     await mkdir(dirname(this.settingsPath), { recursive: true });
     await writeFile(this.settingsPath, JSON.stringify(settings, null, 2));
   }

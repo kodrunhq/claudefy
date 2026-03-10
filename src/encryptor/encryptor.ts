@@ -1,5 +1,6 @@
 import { Encrypter, Decrypter } from "age-encryption";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 export class Encryptor {
   private passphrase: string;
@@ -37,5 +38,34 @@ export class Encryptor {
     d.addPassphrase(this.passphrase);
     const decrypted = await d.decrypt(data, "uint8array");
     return new TextDecoder().decode(decrypted);
+  }
+
+  async encryptDirectory(dirPath: string): Promise<void> {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await this.encryptDirectory(fullPath);
+      } else if (!entry.name.endsWith(".age")) {
+        await this.encryptFile(fullPath, fullPath + ".age");
+        await rm(fullPath);
+      }
+    }
+  }
+
+  async decryptDirectory(dirPath: string): Promise<void> {
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await this.decryptDirectory(fullPath);
+      } else if (entry.name.endsWith(".age")) {
+        const outputPath = fullPath.replace(/\.age$/, "");
+        await this.decryptFile(fullPath, outputPath);
+        await rm(fullPath);
+      }
+    }
   }
 }

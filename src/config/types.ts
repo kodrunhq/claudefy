@@ -9,10 +9,6 @@ export interface ClaudefyConfig {
     useKeychain: boolean;
     cacheDuration: string;
   };
-  sync: {
-    lfsThreshold: number;
-  };
-  filter: Record<string, "allow" | "deny" | "unknown">;
   machineId: string;
 }
 

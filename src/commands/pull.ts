@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -50,6 +50,7 @@ export class PullCommand {
     const storePath = gitAdapter.getStorePath();
     const configDir = join(storePath, "config");
     const unknownDir = join(storePath, "unknown");
+    const resolvedClaudeDir = resolve(this.claudeDir);
 
     // 2. Check for override marker
     const override = await gitAdapter.checkOverrideMarker();
@@ -75,12 +76,11 @@ export class PullCommand {
     }
 
     // 3. Decrypt .age files if encryption is enabled
-    if (config.encryption.enabled && !options.skipEncryption && !options.passphrase) {
-      throw new Error(
-        "Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.",
-      );
-    }
-    if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
+    if (config.encryption.enabled && !options.skipEncryption) {
+      if (!options.passphrase) {
+        throw new Error("Encryption is enabled but CLAUDEFY_PASSPHRASE env var is not set.");
+      }
+
       const encryptor = new Encryptor(options.passphrase);
 
       // Decrypt sensitive config files
@@ -96,7 +96,7 @@ export class PullCommand {
 
       // Decrypt all .age files in unknown/
       if (existsSync(unknownDir)) {
-        await this.decryptDirectory(encryptor, unknownDir);
+        await encryptor.decryptDirectory(unknownDir);
       }
     }
 
@@ -148,7 +148,15 @@ export class PullCommand {
       for (const dirName of projectDirs) {
         const localName = pathMapper.remapDirName(dirName);
         if (localName) {
-          await rename(join(projectsDir, dirName), join(projectsDir, localName));
+          const destPath = resolve(join(projectsDir, localName));
+          // Path containment: ensure renamed dir stays within projects/
+          if (!destPath.startsWith(resolve(projectsDir) + "/")) {
+            console.warn(
+              `Skipping directory rename "${dirName}" → "${localName}": path escapes projects directory`,
+            );
+            continue;
+          }
+          await rename(join(projectsDir, dirName), destPath);
         }
       }
     }
@@ -161,6 +169,11 @@ export class PullCommand {
     if (existsSync(remoteSettingsPath)) {
       const localSettingsPath = join(this.claudeDir, "settings.json");
       const remoteSettings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
+
+      // Security: strip hooks from remote settings to prevent remote hook injection.
+      // Local hooks should never be overwritten by remote data, as an attacker with
+      // store access could inject arbitrary shell commands via SessionStart/SessionEnd hooks.
+      delete remoteSettings.hooks;
 
       if (existsSync(localSettingsPath) && !result.overrideDetected) {
         const localSettings = JSON.parse(await readFile(localSettingsPath, "utf-8"));
@@ -177,8 +190,22 @@ export class PullCommand {
       const entries = await readdir(configDir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.name === "settings.json") continue; // Already handled
+
+        // Security: skip symlinks to prevent path traversal attacks
+        if (entry.isSymbolicLink()) {
+          console.warn(`Skipping symlink in config store: ${entry.name}`);
+          continue;
+        }
+
         const src = join(configDir, entry.name);
-        const dest = join(this.claudeDir, entry.name);
+        const dest = resolve(join(this.claudeDir, entry.name));
+
+        // Path containment: ensure destination stays within ~/.claude/
+        if (!dest.startsWith(resolvedClaudeDir + "/") && dest !== resolvedClaudeDir) {
+          console.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
+          continue;
+        }
+
         await cp(src, dest, { recursive: true, force: true });
         result.filesUpdated++;
       }
@@ -188,14 +215,47 @@ export class PullCommand {
     if (existsSync(unknownDir)) {
       const entries = await readdir(unknownDir, { withFileTypes: true });
       for (const entry of entries) {
+        // Security: skip symlinks to prevent path traversal attacks
+        if (entry.isSymbolicLink()) {
+          console.warn(`Skipping symlink in unknown store: ${entry.name}`);
+          continue;
+        }
+
         const src = join(unknownDir, entry.name);
-        const dest = join(this.claudeDir, entry.name);
+        const dest = resolve(join(this.claudeDir, entry.name));
+
+        // Path containment: ensure destination stays within ~/.claude/
+        if (!dest.startsWith(resolvedClaudeDir + "/") && dest !== resolvedClaudeDir) {
+          console.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
+          continue;
+        }
+
         await cp(src, dest, { recursive: true, force: true });
         result.filesUpdated++;
       }
     }
 
-    // 6. Update machine registry last sync time and commit
+    // 6. Re-encrypt decrypted files in the store before committing,
+    //    so plaintext is never committed to git history.
+    if (config.encryption.enabled && !options.skipEncryption) {
+      const encryptor = new Encryptor(options.passphrase!);
+
+      const filesToReencrypt = ["settings.json", "history.jsonl"];
+      for (const fileName of filesToReencrypt) {
+        const filePath = join(configDir, fileName);
+        if (existsSync(filePath)) {
+          await encryptor.encryptFile(filePath, filePath + ".age");
+          await rm(filePath);
+        }
+      }
+
+      // Re-encrypt all plaintext files in unknown/
+      if (existsSync(unknownDir)) {
+        await encryptor.encryptDirectory(unknownDir);
+      }
+    }
+
+    // 7. Update machine registry last sync time and commit
     const registry = new MachineRegistry(join(storePath, "manifest.json"));
     await registry.updateLastSync(config.machineId);
     await gitAdapter.commitAndPush(`sync: pull on ${config.machineId}`);
@@ -205,19 +265,5 @@ export class PullCommand {
     }
 
     return result;
-  }
-
-  private async decryptDirectory(encryptor: Encryptor, dirPath: string): Promise<void> {
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        await this.decryptDirectory(encryptor, fullPath);
-      } else if (entry.name.endsWith(".age")) {
-        const outputPath = fullPath.replace(/\.age$/, "");
-        await encryptor.decryptFile(fullPath, outputPath);
-        await rm(fullPath);
-      }
-    }
   }
 }

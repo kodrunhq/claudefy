@@ -8,11 +8,13 @@ import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PathMapper } from "../path-mapper/path-mapper.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { Encryptor } from "../encryptor/encryptor.js";
+import { SecretScanner } from "../secret-scanner/scanner.js";
 import { output } from "../output.js";
 
 export interface PushOptions {
   quiet: boolean;
   skipEncryption?: boolean;
+  skipSecretScan?: boolean;
   passphrase?: string;
 }
 
@@ -138,13 +140,26 @@ export class PushCommand {
       }
     }
 
-    // 7. Encrypt files if encryption is enabled
-    if (config.encryption.enabled && !options.skipEncryption && !options.passphrase) {
-      throw new Error(
-        "Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.",
-      );
+    // 7. Scan for secrets before committing
+    if (!options.skipSecretScan) {
+      const scanner = new SecretScanner();
+      const filesToScan = await this.collectFiles(configDir);
+      const unknownFiles = await this.collectFiles(unknownDir);
+      filesToScan.push(...unknownFiles);
+      const findings = await scanner.scanFiles(filesToScan);
+      if (findings.length > 0) {
+        const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+        throw new Error(
+          `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nAborting push. Use --skip-secret-scan to bypass scanning.`,
+        );
+      }
     }
-    if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
+
+    // 8. Encrypt files if encryption is enabled
+    if (config.encryption.enabled && !options.skipEncryption) {
+      if (!options.passphrase) {
+        throw new Error("Encryption is enabled but CLAUDEFY_PASSPHRASE env var is not set.");
+      }
       const encryptor = new Encryptor(options.passphrase);
 
       // Encrypt sensitive config files
@@ -159,15 +174,15 @@ export class PushCommand {
 
       // Encrypt all files in unknown/
       if (existsSync(unknownDir)) {
-        await this.encryptDirectory(encryptor, unknownDir);
+        await encryptor.encryptDirectory(unknownDir);
       }
     }
 
-    // 8. Update machine registry
+    // 9. Update machine registry
     const registry = new MachineRegistry(join(storePath, "manifest.json"));
     await registry.register(config.machineId, hostname(), platform());
 
-    // 9. Commit and push
+    // 10. Commit and push
     await gitAdapter.commitAndPush(`sync: push from ${config.machineId}`);
 
     if (!options.quiet) {
@@ -175,16 +190,18 @@ export class PushCommand {
     }
   }
 
-  private async encryptDirectory(encryptor: Encryptor, dirPath: string): Promise<void> {
+  private async collectFiles(dirPath: string): Promise<string[]> {
+    if (!existsSync(dirPath)) return [];
+    const results: string[] = [];
     const entries = await readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        await this.encryptDirectory(encryptor, fullPath);
-      } else if (!entry.name.endsWith(".age")) {
-        await encryptor.encryptFile(fullPath, fullPath + ".age");
-        await rm(fullPath);
+        results.push(...(await this.collectFiles(fullPath)));
+      } else {
+        results.push(fullPath);
       }
     }
+    return results;
   }
 }
