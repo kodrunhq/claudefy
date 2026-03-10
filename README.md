@@ -12,6 +12,31 @@ claudefy syncs your `~/.claude` directory (commands, skills, agents, hooks, rule
 - **Deep merge** — settings.json merged at the key level; other files use last-write-wins
 - **Override** — wipe remote and push local as source of truth when needed
 
+## Architecture
+
+claudefy uses a private git repository as the sync backend, with per-machine branches to avoid conflicts.
+
+**Branch model:**
+- Each machine syncs to its own branch: `machines/<machineId>`
+- `main` holds the merged state from all machines
+
+**Push (SessionEnd):**
+Commits local `~/.claude` changes to the machine branch, merges into `main`, and pushes both.
+
+**Pull (SessionStart):**
+Fetches `main`, merges into the machine branch, decrypts, remaps paths, and applies to `~/.claude`.
+
+**Override:**
+Wipes `main` and force-updates it to match your machine's current state. Useful when one machine should become the canonical source of truth.
+
+## What Gets Synced
+
+| Category | Items | Notes |
+|----------|-------|-------|
+| **Synced** | commands, agents, skills, hooks, rules, plans, plugins, agent-memory, projects, settings.json, history.jsonl, package.json | Core config that should travel with you |
+| **Never synced** | cache, backups, file-history, shell-snapshots, paste-cache, session-env, tasks, .credentials.json | Machine-local or sensitive data |
+| **Unknown** | Anything not in either list | Encrypted by default before commit |
+
 ## Install
 
 ```bash
@@ -95,7 +120,14 @@ Pass `--hooks` to `init` or `join` to install auto-sync hooks automatically.
 
 ## Encryption
 
-claudefy encrypts files using [age](https://age-encryption.org/) (WASM-based, no native binary needed).
+claudefy encrypts files using [age](https://age-encryption.org/) (WASM-based, no native binary needed) with AES-256-SIV deterministic encryption.
+
+**Why deterministic?** Same plaintext always produces the same ciphertext. This means unchanged files produce no git diff, and git's merge machinery can work with encrypted content.
+
+**How different file types are handled:**
+- **Session transcripts (.jsonl):** encrypted per-line, so git can diff and merge individual lines
+- **Other files:** encrypted as a whole file; deterministic output avoids spurious diffs
+- **Size overhead:** ~38% from base64 encoding
 
 **Passphrase resolution order:**
 1. `--passphrase` CLI flag (highest priority; avoid — visible in process list)
@@ -135,12 +167,22 @@ claudefy config set encryption.enabled false
 claudefy config set encryption.useKeychain true
 ```
 
-## Security
+## Security Model
 
+- `.credentials.json` is never synced (hardcoded in the deny list)
+- Hooks from remote are stripped on pull to prevent code injection
+- Secret scanner detects common patterns (API keys, tokens, high-entropy strings) before push — not exhaustive, but catches the obvious ones
+- Files with detected secrets are encrypted before commit rather than blocking the push
 - Passphrases never stored in plain text on disk
-- Secret scanner detects API keys, tokens, and high-entropy strings before push
 - Unknown files always encrypted — never pushed in cleartext
 - `--passphrase` CLI flag warns about process list exposure
+
+## Multi-Machine Workflow
+
+1. **First machine:** `claudefy init --backend <url> --hooks` — creates the store and installs auto-sync hooks
+2. **Other machines:** `claudefy join --backend <url> --hooks` — clones the store, registers the machine, pulls config, installs hooks
+3. **Automatic sync:** with hooks installed, `pull` runs on SessionStart and `push` runs on SessionEnd — no manual steps needed
+4. **Canonical override:** if one machine has the "right" config, run `claudefy override --confirm` to wipe main and push that machine's state as the source of truth
 
 ## License
 
