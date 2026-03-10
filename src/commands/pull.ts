@@ -103,7 +103,7 @@ export class PullCommand {
 
       // 5. Decrypt any .age files in temp dir
       const encryptedFiles = await this.collectAgeFiles(tmpConfigDir, tmpUnknownDir);
-      if (encryptedFiles.length > 0) {
+      if (encryptedFiles.length > 0 && !options.skipEncryption) {
         if (!options.passphrase) {
           throw new Error(
             "Encrypted files found but no passphrase available. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",

@@ -105,15 +105,19 @@ export class GitAdapter {
 
     await this.git!.add(".");
     const status = await this.git!.status();
-    if (status.isClean()) {
+    const currentBranch = await this.getCurrentBranch();
+
+    if (status.isClean() && status.ahead === 0) {
       return result;
     }
 
-    await this.git!.commit(message);
-    result.committed = true;
+    if (!status.isClean()) {
+      await this.git!.commit(message);
+      result.committed = true;
+    }
 
     try {
-      await this.git!.push(["-u", "origin", await this.getCurrentBranch()]);
+      await this.git!.push(["-u", "origin", currentBranch]);
       result.pushed = true;
     } catch {
       result.pushed = false;
