@@ -1,5 +1,9 @@
 import { env } from "node:process";
-import { createRequire } from "node:module";
+import { createInterface } from "node:readline";
+import { Entry } from "@napi-rs/keyring";
+
+const KEYRING_SERVICE = "claudefy";
+const KEYRING_ACCOUNT = "passphrase";
 
 export type PassphraseSource = "env" | "keychain" | "prompt" | "none";
 
@@ -16,27 +20,113 @@ export async function resolvePassphrase(useKeychain: boolean): Promise<Passphras
 
   if (useKeychain) {
     try {
-      const require = createRequire(import.meta.url);
-      const keytar = require("keytar");
-      const stored = await keytar.getPassword("claudefy", "passphrase");
+      const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
+      const stored = entry.getPassword();
       if (stored) {
         return { passphrase: stored, source: "keychain" };
       }
     } catch {
-      // keytar not available, fall through
+      // Keyring not available (headless, no D-Bus, etc.), fall through
     }
   }
 
   return null;
 }
 
-export async function storePassphraseInKeychain(passphrase: string): Promise<boolean> {
+export function storePassphraseInKeychain(passphrase: string): boolean {
   try {
-    const require = createRequire(import.meta.url);
-    const keytar = require("keytar");
-    await keytar.setPassword("claudefy", "passphrase", passphrase);
+    const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
+    entry.setPassword(passphrase);
     return true;
   } catch {
     return false;
   }
+}
+
+export function isKeychainAvailable(): boolean {
+  try {
+    const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
+    // Try a read — if the backend is unavailable this throws
+    entry.getPassword();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function prompt(question: string, hidden = false): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    if (hidden && process.stdin.isTTY) {
+      const origWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]): boolean => {
+        if (typeof chunk === "string" && chunk.includes(question)) {
+          return origWrite(chunk, ...(args as [BufferEncoding, (err?: Error | null) => void]));
+        }
+        return true;
+      }) as typeof process.stdout.write;
+
+      rl.question(question, (answer) => {
+        process.stdout.write = origWrite;
+        console.log();
+        rl.close();
+        resolve(answer);
+      });
+    } else {
+      rl.question(question, (answer) => {
+        rl.close();
+        resolve(answer);
+      });
+    }
+  });
+}
+
+function promptYesNo(question: string, defaultYes = true): Promise<boolean> {
+  const hint = defaultYes ? "[Y/n]" : "[y/N]";
+  return prompt(`${question} ${hint} `).then((answer) => {
+    if (!answer.trim()) return defaultYes;
+    return answer.trim().toLowerCase().startsWith("y");
+  });
+}
+
+export interface PassphraseSetupResult {
+  passphrase: string;
+  storedInKeychain: boolean;
+}
+
+export async function promptPassphraseSetup(): Promise<PassphraseSetupResult | null> {
+  const wantsEncryption = await promptYesNo("Enable encryption for synced data?");
+  if (!wantsEncryption) {
+    return null;
+  }
+
+  const passphrase = await prompt("Enter encryption passphrase: ", true);
+  if (!passphrase) {
+    return null;
+  }
+
+  const confirm = await prompt("Confirm passphrase: ", true);
+  if (passphrase !== confirm) {
+    throw new Error("Passphrases do not match.");
+  }
+
+  let storedInKeychain = false;
+  if (isKeychainAvailable()) {
+    const storeIt = await promptYesNo("Store passphrase in OS keychain?");
+    if (storeIt) {
+      storedInKeychain = storePassphraseInKeychain(passphrase);
+    }
+  }
+
+  if (!storedInKeychain) {
+    console.log(
+      "Set CLAUDEFY_PASSPHRASE environment variable in your shell profile to avoid re-entering.",
+    );
+  }
+
+  return { passphrase, storedInKeychain };
 }

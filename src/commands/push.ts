@@ -148,9 +148,10 @@ export class PushCommand {
       filesToScan.push(...unknownFiles);
       const findings = await scanner.scanFiles(filesToScan);
       if (findings.length > 0) {
-        const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+        const uniquePatterns = [...new Set(findings.map((f) => f.pattern))];
         throw new Error(
-          `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nAborting push. Use --skip-secret-scan to bypass scanning.`,
+          `Secret scan found ${findings.length} potential secret(s) matching: ${uniquePatterns.join(", ")}.\n` +
+            `Use --skip-secret-scan to bypass scanning.`,
         );
       }
     }
@@ -158,7 +159,9 @@ export class PushCommand {
     // 8. Encrypt files if encryption is enabled
     if (config.encryption.enabled && !options.skipEncryption) {
       if (!options.passphrase) {
-        throw new Error("Encryption is enabled but CLAUDEFY_PASSPHRASE env var is not set.");
+        throw new Error(
+          "Encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+        );
       }
       const encryptor = new Encryptor(options.passphrase);
 

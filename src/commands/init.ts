@@ -5,6 +5,7 @@ import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PushCommand } from "./push.js";
 import { HookManager } from "../hook-manager/hook-manager.js";
 import { output } from "../output.js";
+import { promptPassphraseSetup } from "../encryptor/passphrase.js";
 
 const LFS_GITATTRIBUTES = [
   "projects/**/*.jsonl filter=lfs diff=lfs merge=lfs -text",
@@ -51,8 +52,28 @@ export class InitCommand {
       throw new Error("claudefy is already initialized. Use 'claudefy push' to sync.");
     }
 
+    // Prompt for passphrase if not provided and not skipping encryption
+    let passphrase = options.passphrase;
+    let useKeychain = false;
+    let skipEncryption = options.skipEncryption ?? false;
+
+    if (!passphrase && !skipEncryption && process.stdin.isTTY) {
+      const setup = await promptPassphraseSetup();
+      if (setup) {
+        passphrase = setup.passphrase;
+        useKeychain = setup.storedInKeychain;
+      } else {
+        skipEncryption = true;
+      }
+    }
+
     // 1. Initialize config
-    const config = await configManager.initialize(backend);
+    const config = await configManager.initialize(backend, { useKeychain });
+
+    if (skipEncryption) {
+      config.encryption.enabled = false;
+      await configManager.set("encryption.enabled", false);
+    }
 
     if (!options.quiet) {
       output.info(`Initialized claudefy with machine ID: ${config.machineId}`);
@@ -69,8 +90,8 @@ export class InitCommand {
     const pushCommand = new PushCommand(this.homeDir);
     await pushCommand.execute({
       quiet: options.quiet,
-      skipEncryption: options.skipEncryption,
-      passphrase: options.passphrase,
+      skipEncryption,
+      passphrase,
     });
 
     // 5. Install hooks if requested

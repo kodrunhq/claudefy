@@ -22,7 +22,10 @@ export class ConfigManager {
     this.configDir = join(homeDir, CLAUDEFY_DIR);
   }
 
-  async initialize(backendUrl: string): Promise<ClaudefyConfig> {
+  async initialize(
+    backendUrl: string,
+    options?: { useKeychain?: boolean },
+  ): Promise<ClaudefyConfig> {
     if (this.isInitialized()) {
       throw new Error("claudefy is already initialized. Use 'load()' to read existing config.");
     }
@@ -38,7 +41,7 @@ export class ConfigManager {
       backend: { type: "git", url: backendUrl },
       encryption: {
         enabled: true,
-        useKeychain: false,
+        useKeychain: options?.useKeychain ?? false,
         cacheDuration: "0",
       },
       machineId,
