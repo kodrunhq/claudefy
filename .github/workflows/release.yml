@@ -1,4 +1,4 @@
-name: Release
+name: Release & Publish
 
 on:
   workflow_dispatch:
@@ -14,28 +14,40 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
-    name: Create Release
+    name: Release & Publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GH_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Run tests
         run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke test
+        run: |
+          npm pack
+          TARBALL=$(ls kodrunhq-claudefy-*.tgz)
+          npm install -g "./${TARBALL}"
+          claudefy --version
+          claudefy --help
 
       - name: Configure git
         run: |
@@ -52,9 +64,12 @@ jobs:
 
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION=$(node -p "require('./package.json').version")
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --generate-notes
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
