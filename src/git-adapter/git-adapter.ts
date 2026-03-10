@@ -1,7 +1,11 @@
 import { simpleGit, SimpleGit } from "simple-git";
 import { readFile, writeFile, rm, mkdir, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { join } from "node:path";
+
+const execFileAsync = promisify(execFile);
 
 export interface OverrideMarker {
   machine: string;
@@ -12,6 +16,7 @@ export class GitAdapter {
   private baseDir: string;
   private storePath: string;
   private git: SimpleGit | null = null;
+  private ghAuthCache: boolean | null = null;
 
   constructor(baseDir: string) {
     this.baseDir = baseDir;
@@ -21,16 +26,17 @@ export class GitAdapter {
   async initStore(remoteUrl: string): Promise<void> {
     if (existsSync(this.storePath)) {
       this.git = simpleGit(this.storePath);
+      await this.configureCredentialHelper(this.git, remoteUrl);
       return;
     }
 
+    const cloneGit = await this.gitWithCredentials(this.baseDir, remoteUrl);
+
     try {
-      await simpleGit(this.baseDir).clone(remoteUrl, "store");
+      await cloneGit.clone(remoteUrl, "store");
     } catch (error) {
       // Check if remote is empty (no refs) — only then initialize locally
-      const refs = await simpleGit(this.baseDir)
-        .listRemote([remoteUrl])
-        .catch(() => "");
+      const refs = await cloneGit.listRemote([remoteUrl]).catch(() => "");
       if (refs.trim()) {
         throw new Error(
           `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`,
@@ -39,14 +45,16 @@ export class GitAdapter {
       }
       await mkdir(this.storePath, { recursive: true });
       const git = simpleGit(this.storePath);
-      await git.init();
+      await git.init(["-b", "main"]);
       await git.addRemote("origin", remoteUrl);
+      await this.configureCredentialHelper(git, remoteUrl);
       await writeFile(join(this.storePath, ".gitkeep"), "");
       await git.add(".").commit("initial claudefy store");
       await git.push(["-u", "origin", "main"]);
     }
 
     this.git = simpleGit(this.storePath);
+    await this.configureCredentialHelper(this.git, remoteUrl);
   }
 
   async commitAndPush(message: string): Promise<void> {
@@ -115,5 +123,43 @@ export class GitAdapter {
     if (!this.git) {
       throw new Error("GitAdapter not initialized. Call initStore() first.");
     }
+  }
+
+  private async configureCredentialHelper(git: SimpleGit, remoteUrl: string): Promise<void> {
+    if (!this.isGitHubHttps(remoteUrl)) return;
+    if (!(await this.isGhAuthenticated())) return;
+    try {
+      await git.addConfig("credential.helper", "!gh auth git-credential");
+    } catch {
+      // Best-effort — if it fails, git will fall back to default credential prompts
+    }
+  }
+
+  private async gitWithCredentials(baseDir: string, remoteUrl: string): Promise<SimpleGit> {
+    if (this.isGitHubHttps(remoteUrl) && (await this.isGhAuthenticated())) {
+      return simpleGit(baseDir, {
+        config: ["credential.helper=!gh auth git-credential"],
+      });
+    }
+    return simpleGit(baseDir);
+  }
+
+  private isGitHubHttps(url: string): boolean {
+    try {
+      return new URL(url).hostname === "github.com";
+    } catch {
+      return false;
+    }
+  }
+
+  private async isGhAuthenticated(): Promise<boolean> {
+    if (this.ghAuthCache !== null) return this.ghAuthCache;
+    try {
+      await execFileAsync("gh", ["auth", "status"]);
+      this.ghAuthCache = true;
+    } catch {
+      this.ghAuthCache = false;
+    }
+    return this.ghAuthCache;
   }
 }
