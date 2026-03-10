@@ -1,6 +1,6 @@
 {
   "name": "@kodrunhq/claudefy",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Sync your Claude Code environment across machines",
   "type": "module",
   "main": "dist/index.js",
