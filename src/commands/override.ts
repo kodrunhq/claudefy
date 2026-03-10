@@ -36,6 +36,7 @@ export class OverrideCommand {
     // 1. Initialize git adapter
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(config.backend.url);
+    await gitAdapter.ensureMachineBranch(config.machineId);
     try {
       await gitAdapter.pull();
     } catch {
