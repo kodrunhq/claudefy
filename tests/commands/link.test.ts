@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { LinkCommand } from "../../src/commands/link.js";
 import { ConfigManager } from "../../src/config/config-manager.js";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 
 describe("LinkCommand", () => {
   let homeDir: string;
