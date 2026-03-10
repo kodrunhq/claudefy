@@ -17,7 +17,7 @@ describe("Encryptor", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("encrypts and decrypts a file", { timeout: 15_000 }, async () => {
+  it("encrypts and decrypts a file", async () => {
     const encryptor = new Encryptor(passphrase);
     const srcPath = join(tempDir, "test.json");
     const encPath = join(tempDir, "test.json.age");
@@ -53,7 +53,7 @@ describe("Encryptor", () => {
     await expect(encryptor2.decryptString(encrypted)).rejects.toThrow();
   });
 
-  it("encrypts and decrypts a directory recursively", { timeout: 15_000 }, async () => {
+  it("encrypts and decrypts a directory recursively", async () => {
     const encryptor = new Encryptor(passphrase);
     const subDir = join(tempDir, "sub");
     await mkdir(subDir, { recursive: true });
@@ -77,7 +77,7 @@ describe("Encryptor", () => {
     expect(await readFile(join(subDir, "b.txt"), "utf-8")).toBe("file-b");
   });
 
-  it("skips symlinks in directory encryption/decryption", { timeout: 15_000 }, async () => {
+  it("skips symlinks in directory encryption/decryption", async () => {
     const encryptor = new Encryptor(passphrase);
     await writeFile(join(tempDir, "real.txt"), "real-content");
     await symlink(join(tempDir, "real.txt"), join(tempDir, "link.txt"));
@@ -90,5 +90,72 @@ describe("Encryptor", () => {
     // Symlink target is gone, but the symlink entry itself should still exist
     const entries = await readdir(tempDir);
     expect(entries).not.toContain("link.txt.age");
+  });
+
+  it("produces deterministic output (same input = same ciphertext)", async () => {
+    const encryptor = new Encryptor(passphrase);
+    const srcPath = join(tempDir, "deterministic.txt");
+    const encPath1 = join(tempDir, "out1.age");
+    const encPath2 = join(tempDir, "out2.age");
+
+    await writeFile(srcPath, "deterministic test content");
+
+    await encryptor.encryptFile(srcPath, encPath1);
+    await encryptor.encryptFile(srcPath, encPath2);
+
+    const enc1 = await readFile(encPath1, "utf-8");
+    const enc2 = await readFile(encPath2, "utf-8");
+    expect(enc1).toBe(enc2);
+  });
+
+  it("uses per-line encryption for .jsonl files", async () => {
+    const encryptor = new Encryptor(passphrase);
+    const jsonlContent = '{"a":1}\n{"b":2}\n{"c":3}\n';
+    const srcPath = join(tempDir, "data.jsonl");
+    const encPath = join(tempDir, "data.jsonl.age");
+
+    await writeFile(srcPath, jsonlContent);
+    await encryptor.encryptFile(srcPath, encPath);
+
+    const encrypted = await readFile(encPath, "utf-8");
+    // Encrypted output should have the same number of lines as input
+    const inputLines = jsonlContent.trimEnd().split("\n");
+    const outputLines = encrypted.trimEnd().split("\n");
+    expect(outputLines.length).toBe(inputLines.length);
+
+    // Each line should be different from the original
+    for (const line of outputLines) {
+      expect(line).not.toContain("{");
+    }
+  });
+
+  it("uses file-level encryption for non-.jsonl files", async () => {
+    const encryptor = new Encryptor(passphrase);
+    const srcPath = join(tempDir, "config.json");
+    const encPath = join(tempDir, "config.json.age");
+
+    await writeFile(srcPath, '{\n  "key": "value"\n}\n');
+    await encryptor.encryptFile(srcPath, encPath);
+
+    const encrypted = await readFile(encPath, "utf-8");
+    // File-level encryption produces a single base64 string (no newlines)
+    expect(encrypted).not.toContain("\n");
+    // Should be valid base64
+    expect(() => Buffer.from(encrypted, "base64")).not.toThrow();
+  });
+
+  it("round-trips .jsonl files through encrypt/decrypt", async () => {
+    const encryptor = new Encryptor(passphrase);
+    const jsonlContent = '{"a":1}\n{"b":2}\n{"c":3}\n';
+    const srcPath = join(tempDir, "data.jsonl");
+    const encPath = join(tempDir, "data.jsonl.age");
+    const decPath = join(tempDir, "data-dec.jsonl");
+
+    await writeFile(srcPath, jsonlContent);
+    await encryptor.encryptFile(srcPath, encPath);
+    await encryptor.decryptFile(encPath, decPath);
+
+    const decrypted = await readFile(decPath, "utf-8");
+    expect(decrypted).toBe(jsonlContent);
   });
 });

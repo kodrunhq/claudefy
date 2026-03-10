@@ -1,43 +1,54 @@
-import { Encrypter, Decrypter } from "age-encryption";
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { LineEncryptor } from "./line-encryptor.js";
+import { FileEncryptor } from "./file-encryptor.js";
 
 export class Encryptor {
-  private passphrase: string;
+  private lineEncryptor: LineEncryptor;
+  private fileEncryptor: FileEncryptor;
 
   constructor(passphrase: string) {
-    this.passphrase = passphrase;
+    this.lineEncryptor = new LineEncryptor(passphrase);
+    this.fileEncryptor = new FileEncryptor(passphrase);
+  }
+
+  private isJsonlFile(filePath: string): boolean {
+    return filePath.endsWith(".jsonl");
+  }
+
+  private isOriginallyJsonl(agePath: string): boolean {
+    return agePath.endsWith(".jsonl.age");
   }
 
   async encryptFile(inputPath: string, outputPath: string): Promise<void> {
-    const data = await readFile(inputPath);
-    const e = new Encrypter();
-    e.setPassphrase(this.passphrase);
-    const encrypted = await e.encrypt(data);
-    await writeFile(outputPath, encrypted);
+    if (this.isJsonlFile(inputPath)) {
+      const content = await readFile(inputPath, "utf-8");
+      const encrypted = this.lineEncryptor.encryptFileContent(content);
+      await writeFile(outputPath, encrypted);
+    } else {
+      const data = await readFile(inputPath);
+      const encrypted = this.fileEncryptor.encrypt(new Uint8Array(data));
+      await writeFile(outputPath, encrypted);
+    }
   }
 
   async decryptFile(inputPath: string, outputPath: string): Promise<void> {
-    const data = await readFile(inputPath);
-    const d = new Decrypter();
-    d.addPassphrase(this.passphrase);
-    const decrypted = await d.decrypt(data, "uint8array");
-    await writeFile(outputPath, decrypted);
+    const content = await readFile(inputPath, "utf-8");
+    if (this.isOriginallyJsonl(inputPath)) {
+      const decrypted = this.lineEncryptor.decryptFileContent(content);
+      await writeFile(outputPath, decrypted);
+    } else {
+      const decrypted = this.fileEncryptor.decrypt(content);
+      await writeFile(outputPath, decrypted);
+    }
   }
 
   async encryptString(input: string): Promise<string> {
-    const e = new Encrypter();
-    e.setPassphrase(this.passphrase);
-    const encrypted = await e.encrypt(new TextEncoder().encode(input));
-    return Buffer.from(encrypted).toString("base64");
+    return this.fileEncryptor.encryptString(input);
   }
 
-  async decryptString(base64Input: string): Promise<string> {
-    const data = new Uint8Array(Buffer.from(base64Input, "base64"));
-    const d = new Decrypter();
-    d.addPassphrase(this.passphrase);
-    const decrypted = await d.decrypt(data, "uint8array");
-    return new TextDecoder().decode(decrypted);
+  async decryptString(encrypted: string): Promise<string> {
+    return this.fileEncryptor.decryptString(encrypted);
   }
 
   async encryptDirectory(dirPath: string): Promise<void> {
