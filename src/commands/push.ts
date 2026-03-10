@@ -140,23 +140,8 @@ export class PushCommand {
       }
     }
 
-    // 7. Scan for secrets before committing
-    if (!options.skipSecretScan) {
-      const scanner = new SecretScanner();
-      const filesToScan = await this.collectFiles(configDir);
-      const unknownFiles = await this.collectFiles(unknownDir);
-      filesToScan.push(...unknownFiles);
-      const findings = await scanner.scanFiles(filesToScan);
-      if (findings.length > 0) {
-        const uniquePatterns = [...new Set(findings.map((f) => f.pattern))];
-        throw new Error(
-          `Secret scan found ${findings.length} potential secret(s) matching: ${uniquePatterns.join(", ")}.\n` +
-            `Use --skip-secret-scan to bypass scanning.`,
-        );
-      }
-    }
-
-    // 8. Encrypt files if encryption is enabled
+    // 7. Encrypt files if encryption is enabled (before scanning, so encrypted
+    //    files don't trigger false positives — they'll be .age blobs)
     if (config.encryption.enabled && !options.skipEncryption) {
       if (!options.passphrase) {
         throw new Error(
@@ -178,6 +163,21 @@ export class PushCommand {
       // Encrypt all files in unknown/
       if (existsSync(unknownDir)) {
         await encryptor.encryptDirectory(unknownDir);
+      }
+    }
+
+    // 8. Scan remaining plaintext files for secrets before committing
+    if (!options.skipSecretScan) {
+      const scanner = new SecretScanner();
+      const filesToScan = await this.collectFiles(configDir);
+      const unknownFiles = await this.collectFiles(unknownDir);
+      filesToScan.push(...unknownFiles);
+      const findings = await scanner.scanFiles(filesToScan);
+      if (findings.length > 0) {
+        const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+        throw new Error(
+          `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nAborting push. Use --skip-secret-scan to bypass scanning.`,
+        );
       }
     }
 

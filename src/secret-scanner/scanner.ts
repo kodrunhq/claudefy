@@ -22,6 +22,9 @@ const SECRET_PATTERNS: { name: string; regex: RegExp }[] = [
 
 export class SecretScanner {
   async scanFile(filePath: string): Promise<SecretFinding[]> {
+    // Skip encrypted files — they're binary blobs, not plaintext secrets
+    if (filePath.endsWith(".age")) return [];
+
     const content = await readFile(filePath, "utf-8");
     const findings: SecretFinding[] = [];
     const lines = content.split("\n");
