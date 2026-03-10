@@ -63,8 +63,8 @@ Replace age encryption entirely with AES-256-SIV from `@noble/ciphers`.
 - No merge support (LWW via git), but no spurious diffs
 
 **Key derivation**:
-- HMAC-SHA256(passphrase, salt) where salt is `claudefy-line-v1` or `claudefy-file-v1`
-- Produces 32-byte key for AES-256-SIV
+- PBKDF2-SHA256(passphrase, salt, 100,000 iterations), where salt is `claudefy-line-v1` or `claudefy-file-v1`
+- The derived key is 32 bytes and is used as the AES-256-SIV key
 
 **Tradeoff**: ~38% size increase from base64 encoding. Acceptable given determinism, mergeability, and 12-100x faster encryption (benchmarked in `benchmarks/per-line-encryption.ts`).
 

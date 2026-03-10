@@ -170,7 +170,7 @@ export class PullCommand {
             // Path containment: ensure renamed dir stays within projects/
             const rel = relative(resolve(projectsDir), destPath);
             if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
-              console.warn(
+              output.warn(
                 `Skipping directory rename "${dirName}" -> "${localName}": path escapes projects directory`,
               );
               continue;
@@ -212,7 +212,7 @@ export class PullCommand {
 
           // Security: skip symlinks to prevent path traversal attacks
           if (entry.isSymbolicLink()) {
-            console.warn(`Skipping symlink in config store: ${entry.name}`);
+            output.warn(`Skipping symlink in config store: ${entry.name}`);
             continue;
           }
 
@@ -222,7 +222,7 @@ export class PullCommand {
           // Path containment: ensure destination stays within ~/.claude/
           const relPath = relative(resolvedClaudeDir, dest);
           if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
-            console.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
+            output.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
             continue;
           }
 
@@ -237,7 +237,7 @@ export class PullCommand {
         for (const entry of entries) {
           // Security: skip symlinks to prevent path traversal attacks
           if (entry.isSymbolicLink()) {
-            console.warn(`Skipping symlink in unknown store: ${entry.name}`);
+            output.warn(`Skipping symlink in unknown store: ${entry.name}`);
             continue;
           }
 
@@ -247,7 +247,7 @@ export class PullCommand {
           // Path containment: ensure destination stays within ~/.claude/
           const relPath = relative(resolvedClaudeDir, dest);
           if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
-            console.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
+            output.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
             continue;
           }
 

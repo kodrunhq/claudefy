@@ -140,9 +140,11 @@ export class PushCommand {
             const destPath = resolve(join(projectsDir, canonicalId));
             const rel = relative(resolve(projectsDir), destPath);
             if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
-              output.warn(
-                `Skipping directory rename "${dirName}": path escapes projects directory`,
-              );
+              if (!options.quiet) {
+                output.warn(
+                  `Skipping directory rename "${dirName}": path escapes projects directory`,
+                );
+              }
               continue;
             }
             await rename(join(projectsDir, dirName), destPath);
@@ -202,9 +204,20 @@ export class PushCommand {
     await registry.conditionalRegister(config.machineId, hostname(), platform(), hasRealChanges);
 
     // 10. Commit and push with branch support
-    await gitAdapter.commitAndPush(`sync: push from ${config.machineId}`, config.machineId);
+    const commitResult = await gitAdapter.commitAndPush(
+      `sync: push from ${config.machineId}`,
+      config.machineId,
+    );
 
     if (!options.quiet) {
+      if (commitResult.committed && !commitResult.pushed) {
+        output.warn(
+          "Changes were committed locally, but pushing to the remote failed. Retry with 'claudefy push'.",
+        );
+      }
+      if (commitResult.pushed && !commitResult.mergedToMain) {
+        output.warn("Unable to merge machine branch into main. You may need to resolve conflicts.");
+      }
       output.success("Push complete.");
     }
   }

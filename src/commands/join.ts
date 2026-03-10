@@ -52,7 +52,15 @@ export class JoinCommand {
     // 4. Register this machine and commit
     const registry = new MachineRegistry(join(gitAdapter.getStorePath(), "manifest.json"));
     await registry.register(config.machineId, hostname(), platform());
-    await gitAdapter.commitAndPush(`sync: ${config.machineId} joined`, config.machineId);
+    const commitResult = await gitAdapter.commitAndPush(
+      `sync: ${config.machineId} joined`,
+      config.machineId,
+    );
+    if (!commitResult.pushed && !options.quiet) {
+      output.warn(
+        "Machine registry update could not be pushed to the remote. Check your connection and try 'claudefy push'.",
+      );
+    }
 
     // 5. Install hooks if requested
     if (options.installHooks) {
