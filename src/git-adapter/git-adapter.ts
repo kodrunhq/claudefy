@@ -153,9 +153,9 @@ export class GitAdapter {
 
     await this.git!.fetch("origin");
 
-    // Checkout main and pull latest
+    // Checkout main and reset to remote (handles force-pushed overrides)
     await this.git!.checkout("main");
-    await this.git!.pull("origin", "main");
+    await this.git!.reset(["--hard", "origin/main"]);
 
     // Go back to machine branch and merge main into it
     await this.git!.checkout(currentBranch);

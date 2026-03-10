@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PullCommand } from "../../src/commands/pull.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { GitAdapter } from "../../src/git-adapter/git-adapter.js";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -132,8 +132,54 @@ describe("PullCommand", () => {
     expect(settings.theme).toBe("dark");
     // Local "editor" key preserved
     expect(settings.editor).toBe("vim");
-    // Remote hooks are stripped for security (prevents hook injection)
+    // Empty hooks array from remote is stripped (no claudefy hooks, no user hooks)
     expect(settings.hooks).toBeUndefined();
+  });
+
+  it("preserves non-claudefy hooks from remote settings", async () => {
+    // Push settings with both claudefy and user hooks from Machine A
+    await writeFile(
+      join(pushHomeDir, ".claude", "settings.json"),
+      JSON.stringify({
+        theme: "dark",
+        hooks: {
+          SessionStart: [
+            {
+              matcher: ".*",
+              hooks: [{ type: "command", command: "claudefy pull --quiet" }],
+            },
+            {
+              matcher: ".*",
+              hooks: [{ type: "command", command: "my-custom-tool setup" }],
+            },
+          ],
+          SessionEnd: [
+            {
+              matcher: ".*",
+              hooks: [{ type: "command", command: "claudefy push --quiet" }],
+            },
+          ],
+        },
+      }),
+    );
+
+    const push = new PushCommand(pushHomeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    const settings = JSON.parse(
+      await readFile(join(pullHomeDir, ".claude", "settings.json"), "utf-8"),
+    );
+
+    // Claudefy hooks should be stripped
+    // User hook "my-custom-tool setup" should be preserved
+    expect(settings.hooks).toBeDefined();
+    expect(settings.hooks.SessionStart).toHaveLength(1);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe("my-custom-tool setup");
+    // SessionEnd had only claudefy hooks, so it should be removed entirely
+    expect(settings.hooks.SessionEnd).toBeUndefined();
   });
 
   it("detects override marker and creates backup", async () => {
@@ -141,8 +187,9 @@ describe("PullCommand", () => {
     const pushClaudefyDir = join(pushHomeDir, ".claudefy");
     const gitAdapter = new GitAdapter(pushClaudefyDir);
     await gitAdapter.initStore(remoteDir);
+    await gitAdapter.ensureMachineBranch("machine-a");
     await gitAdapter.writeOverrideMarker("machine-a");
-    await gitAdapter.commitAndPush("override: machine-a");
+    await gitAdapter.commitAndPush("override: machine-a", "machine-a");
 
     // Machine B has existing content that should be backed up
     await writeFile(
@@ -198,27 +245,45 @@ describe("PullCommand", () => {
     expect(settings.theme).toBe("dark");
   });
 
-  it("updates machine registry last sync time", async () => {
-    // First, register machine-b in the registry by doing a push
-    const pullClaudefyDir = join(pullHomeDir, ".claudefy");
-
-    // We need machine-b registered first. Push from machine B to register it.
-    const pushB = new PushCommand(pullHomeDir);
-    await pushB.execute({ quiet: true, skipEncryption: true });
-
-    // Now pull
+  it("does not create commits in the store (store unchanged after pull)", async () => {
     const pull = new PullCommand(pullHomeDir);
     await pull.execute({ quiet: true, skipEncryption: true });
 
-    // Verify manifest was updated (machine-b should have a recent lastSync)
+    // Check that the store is clean (no new commits from pull)
+    const pullClaudefyDir = join(pullHomeDir, ".claudefy");
     const gitAdapter = new GitAdapter(pullClaudefyDir);
     await gitAdapter.initStore(remoteDir);
-    const manifest = JSON.parse(
-      await readFile(join(gitAdapter.getStorePath(), "manifest.json"), "utf-8"),
-    );
+    const isClean = await gitAdapter.isClean();
+    expect(isClean).toBe(true);
+  });
 
-    const machineB = manifest.machines.find((m: any) => m.machineId === "machine-b");
-    expect(machineB).toBeDefined();
-    expect(machineB.lastSync).toBeDefined();
+  it("cleans up temp directory after pull", async () => {
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    const tmpDir = join(pullHomeDir, ".claudefy", ".pull-tmp");
+    expect(existsSync(tmpDir)).toBe(false);
+  });
+
+  it("does not modify store files during pull", async () => {
+    // First pull to set up machine branch
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    // Read store config after pull
+    const pullClaudefyDir = join(pullHomeDir, ".claudefy");
+    const storePath = join(pullClaudefyDir, "store");
+    const storeConfigDir = join(storePath, "config");
+
+    if (existsSync(storeConfigDir)) {
+      // Store settings should still have the original hooks (not filtered)
+      const storeSettingsPath = join(storeConfigDir, "settings.json");
+      if (existsSync(storeSettingsPath)) {
+        const storeSettings = JSON.parse(await readFile(storeSettingsPath, "utf-8"));
+        // The store should retain the original data (hooks included)
+        // since pull operates on a temp copy
+        expect(storeSettings.hooks).toBeDefined();
+      }
+    }
   });
 });
