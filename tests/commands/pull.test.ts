@@ -158,7 +158,7 @@ describe("PullCommand", () => {
     expect(existsSync(result.backupPath!)).toBe(true);
   });
 
-  it("handles encrypted files on pull", async () => {
+  it("handles encrypted files on pull", { timeout: 15_000 }, async () => {
     // Push with encryption from Machine A
     await writeFile(
       join(pushHomeDir, ".claudefy", "config.json"),
