@@ -2,14 +2,29 @@ import type { SyncFilterConfig } from "./types.js";
 
 export const DEFAULT_SYNC_FILTER: SyncFilterConfig = {
   allowlist: [
-    "commands", "agents", "skills", "hooks", "rules", "plans",
-    "plugins", "agent-memory", "projects",
-    "settings.json", "history.jsonl", "package.json",
+    "commands",
+    "agents",
+    "skills",
+    "hooks",
+    "rules",
+    "plans",
+    "plugins",
+    "agent-memory",
+    "projects",
+    "settings.json",
+    "history.jsonl",
+    "package.json",
   ],
   denylist: [
-    "cache", "backups", "file-history", "shell-snapshots",
-    "paste-cache", "session-env", "tasks",
-    ".credentials.json", "mcp-needs-auth-cache.json",
+    "cache",
+    "backups",
+    "file-history",
+    "shell-snapshots",
+    "paste-cache",
+    "session-env",
+    "tasks",
+    ".credentials.json",
+    "mcp-needs-auth-cache.json",
   ],
 };
 

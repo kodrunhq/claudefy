@@ -3,7 +3,7 @@ import { InitCommand } from "../../src/commands/init.js";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import simpleGit from "simple-git";
+import { simpleGit } from "simple-git";
 
 describe("InitCommand --create-repo", () => {
   let homeDir: string;
@@ -20,6 +20,7 @@ describe("InitCommand --create-repo", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await rm(homeDir, { recursive: true, force: true });
     await rm(remoteDir, { recursive: true, force: true });
   });
@@ -31,7 +32,7 @@ describe("InitCommand --create-repo", () => {
     vi.spyOn(RepoCreator.prototype, "create").mockResolvedValue(remoteDir);
 
     await cmd.execute({
-      backend: undefined as unknown as string,
+      backend: undefined,
       quiet: true,
       skipEncryption: true,
       createRepo: true,
@@ -44,7 +45,7 @@ describe("InitCommand --create-repo", () => {
     const cmd = new InitCommand(homeDir);
     await expect(
       cmd.execute({
-        backend: undefined as unknown as string,
+        backend: undefined,
         quiet: true,
         skipEncryption: true,
       }),

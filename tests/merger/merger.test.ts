@@ -46,7 +46,7 @@ describe("Merger", () => {
     it("returns remote when remote is newer", () => {
       const result = merger.lastWriteWins(
         { content: "local", mtime: 1000 },
-        { content: "remote", mtime: 2000 }
+        { content: "remote", mtime: 2000 },
       );
       expect(result).toBe("remote");
     });
@@ -54,7 +54,7 @@ describe("Merger", () => {
     it("returns local when local is newer", () => {
       const result = merger.lastWriteWins(
         { content: "local", mtime: 2000 },
-        { content: "remote", mtime: 1000 }
+        { content: "remote", mtime: 1000 },
       );
       expect(result).toBe("local");
     });
@@ -62,7 +62,7 @@ describe("Merger", () => {
     it("returns remote on tie", () => {
       const result = merger.lastWriteWins(
         { content: "local", mtime: 1000 },
-        { content: "remote", mtime: 1000 }
+        { content: "remote", mtime: 1000 },
       );
       expect(result).toBe("remote");
     });

@@ -1,4 +1,4 @@
-import simpleGit, { SimpleGit } from "simple-git";
+import { simpleGit, SimpleGit } from "simple-git";
 import { readFile, writeFile, rm, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -33,7 +33,8 @@ export class GitAdapter {
         .catch(() => "");
       if (refs.trim()) {
         throw new Error(
-          `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`
+          `Failed to clone non-empty remote '${remoteUrl}': ${(error as Error).message}`,
+          { cause: error },
         );
       }
       await mkdir(this.storePath, { recursive: true });
@@ -69,10 +70,7 @@ export class GitAdapter {
       machine: machineId,
       timestamp: new Date().toISOString(),
     };
-    await writeFile(
-      join(this.storePath, ".override"),
-      JSON.stringify(marker, null, 2)
-    );
+    await writeFile(join(this.storePath, ".override"), JSON.stringify(marker, null, 2));
   }
 
   async checkOverrideMarker(): Promise<OverrideMarker | null> {

@@ -2,9 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { OverrideCommand } from "../../src/commands/override.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { PullCommand } from "../../src/commands/pull.js";
-import {
-  mkdtemp, rm, mkdir, writeFile, readFile, readdir,
-} from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -30,10 +28,13 @@ describe("OverrideCommand", () => {
     await writeFile(join(claudeDir, "commands", "test.md"), "# Test Command");
     await mkdir(join(claudeDir, "agents"), { recursive: true });
     await writeFile(join(claudeDir, "agents", "my-agent.md"), "# Agent");
-    await writeFile(join(claudeDir, "settings.json"), JSON.stringify({
-      theme: "dark",
-      editor: "vscode",
-    }));
+    await writeFile(
+      join(claudeDir, "settings.json"),
+      JSON.stringify({
+        theme: "dark",
+        editor: "vscode",
+      }),
+    );
 
     // Initialize claudefy config
     await mkdir(join(claudefyDir, "backups"), { recursive: true });
@@ -46,7 +47,7 @@ describe("OverrideCommand", () => {
         sync: { lfsThreshold: 524288 },
         filter: {},
         machineId: "test-machine-a",
-      })
+      }),
     );
     await writeFile(join(claudefyDir, "machine-id"), "test-machine-a");
     await writeFile(
@@ -54,7 +55,7 @@ describe("OverrideCommand", () => {
       JSON.stringify({
         allowlist: ["commands", "agents", "settings.json"],
         denylist: ["cache"],
-      })
+      }),
     );
     await writeFile(join(claudefyDir, "links.json"), "{}");
   });
@@ -66,9 +67,9 @@ describe("OverrideCommand", () => {
 
   it("throws without --confirm flag", async () => {
     const override = new OverrideCommand(homeDir);
-    await expect(
-      override.execute({ quiet: true, skipEncryption: true })
-    ).rejects.toThrow("Override requires --confirm flag");
+    await expect(override.execute({ quiet: true, skipEncryption: true })).rejects.toThrow(
+      "Override requires --confirm flag",
+    );
   });
 
   it("wipes remote and repopulates from local", async () => {
@@ -79,7 +80,7 @@ describe("OverrideCommand", () => {
     // Modify local settings
     await writeFile(
       join(claudeDir, "settings.json"),
-      JSON.stringify({ theme: "light", newKey: "newValue" })
+      JSON.stringify({ theme: "light", newKey: "newValue" }),
     );
 
     // Run override
@@ -92,7 +93,7 @@ describe("OverrideCommand", () => {
     const storePath = join(verifyDir, "store");
 
     const settings = JSON.parse(
-      await readFile(join(storePath, "config", "settings.json"), "utf-8")
+      await readFile(join(storePath, "config", "settings.json"), "utf-8"),
     );
     expect(settings.theme).toBe("light");
     expect(settings.newKey).toBe("newValue");
@@ -100,10 +101,7 @@ describe("OverrideCommand", () => {
     expect(settings.editor).toBeUndefined();
 
     // Commands should still be present (repopulated by push)
-    const command = await readFile(
-      join(storePath, "config", "commands", "test.md"),
-      "utf-8"
-    );
+    const command = await readFile(join(storePath, "config", "commands", "test.md"), "utf-8");
     expect(command).toBe("# Test Command");
 
     await rm(verifyDir, { recursive: true, force: true });
@@ -117,7 +115,7 @@ describe("OverrideCommand", () => {
     // Machine A modifies settings and overrides
     await writeFile(
       join(claudeDir, "settings.json"),
-      JSON.stringify({ theme: "override-theme", overrideOnly: true })
+      JSON.stringify({ theme: "override-theme", overrideOnly: true }),
     );
     const override = new OverrideCommand(homeDir);
     await override.execute({ quiet: true, skipEncryption: true, confirm: true });
@@ -130,7 +128,7 @@ describe("OverrideCommand", () => {
     await mkdir(claudeDirB, { recursive: true });
     await writeFile(
       join(claudeDirB, "settings.json"),
-      JSON.stringify({ theme: "machine-b-theme", localKey: "localValue" })
+      JSON.stringify({ theme: "machine-b-theme", localKey: "localValue" }),
     );
 
     await mkdir(join(claudefyDirB, "backups"), { recursive: true });
@@ -143,7 +141,7 @@ describe("OverrideCommand", () => {
         sync: { lfsThreshold: 524288 },
         filter: {},
         machineId: "test-machine-b",
-      })
+      }),
     );
     await writeFile(join(claudefyDirB, "machine-id"), "test-machine-b");
     await writeFile(
@@ -151,7 +149,7 @@ describe("OverrideCommand", () => {
       JSON.stringify({
         allowlist: ["commands", "agents", "settings.json"],
         denylist: ["cache"],
-      })
+      }),
     );
     await writeFile(join(claudefyDirB, "links.json"), "{}");
 
@@ -164,17 +162,12 @@ describe("OverrideCommand", () => {
     expect(existsSync(result.backupPath!)).toBe(true);
 
     // Machine B should get override content (no merge, full overwrite for settings)
-    const settingsB = JSON.parse(
-      await readFile(join(claudeDirB, "settings.json"), "utf-8")
-    );
+    const settingsB = JSON.parse(await readFile(join(claudeDirB, "settings.json"), "utf-8"));
     expect(settingsB.theme).toBe("override-theme");
     expect(settingsB.overrideOnly).toBe(true);
 
     // Commands should be present
-    const commandB = await readFile(
-      join(claudeDirB, "commands", "test.md"),
-      "utf-8"
-    );
+    const commandB = await readFile(join(claudeDirB, "commands", "test.md"), "utf-8");
     expect(commandB).toBe("# Test Command");
 
     await rm(homeDirB, { recursive: true, force: true });

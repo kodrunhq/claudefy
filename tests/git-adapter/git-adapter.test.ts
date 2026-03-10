@@ -37,10 +37,7 @@ describe("GitAdapter", () => {
 
     const storePath = adapter.getStorePath();
     await mkdir(join(storePath, "config", "commands"), { recursive: true });
-    await writeFile(
-      join(storePath, "config", "commands", "test.md"),
-      "# Test"
-    );
+    await writeFile(join(storePath, "config", "commands", "test.md"), "# Test");
 
     await adapter.commitAndPush("test: add command");
 
@@ -49,7 +46,7 @@ describe("GitAdapter", () => {
     await verifyGit.clone(remoteDir, "store");
     const content = await readFile(
       join(verifyDir, "store", "config", "commands", "test.md"),
-      "utf-8"
+      "utf-8",
     );
     expect(content).toBe("# Test");
     await rm(verifyDir, { recursive: true, force: true });
@@ -67,10 +64,7 @@ describe("GitAdapter", () => {
     await simpleGit(otherStore).add(".").commit("add test file").push();
 
     await adapter.pull();
-    const content = await readFile(
-      join(adapter.getStorePath(), "test-file.txt"),
-      "utf-8"
-    );
+    const content = await readFile(join(adapter.getStorePath(), "test-file.txt"), "utf-8");
     expect(content).toBe("from other machine");
 
     await rm(otherDir, { recursive: true, force: true });
@@ -106,10 +100,7 @@ describe("GitAdapter", () => {
 
     const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
     await simpleGit(verifyDir).clone(remoteDir, "store");
-    const override = await readFile(
-      join(verifyDir, "store", ".override"),
-      "utf-8"
-    );
+    const override = await readFile(join(verifyDir, "store", ".override"), "utf-8");
     expect(JSON.parse(override).machine).toBe("override-machine");
     await rm(verifyDir, { recursive: true, force: true });
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { DoctorCommand, DoctorCheck } from "../../src/commands/doctor.js";
+import { DoctorCommand } from "../../src/commands/doctor.js";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";

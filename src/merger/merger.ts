@@ -10,7 +10,7 @@ export class Merger {
 
   lastWriteWins(
     local: { content: string; mtime: number },
-    remote: { content: string; mtime: number }
+    remote: { content: string; mtime: number },
   ): string {
     if (local.mtime > remote.mtime) return local.content;
     return remote.content;

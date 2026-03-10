@@ -31,10 +31,19 @@ export class ConfigCommand {
     return current;
   }
 
+  private static readonly FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
   async set(key: string, value: unknown): Promise<void> {
     const configManager = new ConfigManager(this.homeDir);
     if (!configManager.isInitialized()) {
       throw new Error("claudefy is not initialized. Run 'claudefy init' first.");
+    }
+
+    const parts = key.split(".");
+    for (const part of parts) {
+      if (ConfigCommand.FORBIDDEN_KEYS.has(part)) {
+        throw new Error(`Invalid config key: "${key}" — "${part}" is not allowed`);
+      }
     }
 
     const parsed = this.parseValue(value);

@@ -43,8 +43,8 @@ export class PushCommand {
       const unknownLabel = willEncrypt ? "unknown (encrypted)" : "unknown";
       output.info(
         `Syncing: ${classification.allowlist.length} allowed, ` +
-        `${classification.unknown.length} ${unknownLabel}, ` +
-        `${classification.denylist.length} denied`
+          `${classification.unknown.length} ${unknownLabel}, ` +
+          `${classification.denylist.length} denied`,
       );
     }
 
@@ -117,11 +117,12 @@ export class PushCommand {
     const historyPath = join(configDir, "history.jsonl");
     if (existsSync(historyPath)) {
       const content = await readFile(historyPath, "utf-8");
-      const normalized = content
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => pathMapper.normalizeJsonlLine(line))
-        .join("\n") + "\n";
+      const normalized =
+        content
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => pathMapper.normalizeJsonlLine(line))
+          .join("\n") + "\n";
       await writeFile(historyPath, normalized);
     }
 
@@ -139,7 +140,9 @@ export class PushCommand {
 
     // 7. Encrypt files if encryption is enabled
     if (config.encryption.enabled && !options.skipEncryption && !options.passphrase) {
-      throw new Error("Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.");
+      throw new Error(
+        "Encryption is enabled but no passphrase provided. Use --passphrase or set CLAUDEFY_PASSPHRASE.",
+      );
     }
     if (config.encryption.enabled && !options.skipEncryption && options.passphrase) {
       const encryptor = new Encryptor(options.passphrase);

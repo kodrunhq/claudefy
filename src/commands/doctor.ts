@@ -60,12 +60,16 @@ export class DoctorCommand {
     if (config.encryption.enabled) {
       return { name: "encryption", status: "pass", detail: "encryption enabled" };
     }
-    return { name: "encryption", status: "warn", detail: "encryption disabled — files pushed in cleartext" };
+    return {
+      name: "encryption",
+      status: "warn",
+      detail: "encryption disabled — files pushed in cleartext",
+    };
   }
 
   private async checkRemote(url: string): Promise<DoctorCheck> {
     try {
-      await execFileAsync("git", ["ls-remote", "--exit-code", url], { timeout: 10000 });
+      await execFileAsync("git", ["ls-remote", url], { timeout: 10000 });
       return { name: "remote-reachable", status: "pass", detail: `remote ${url} is reachable` };
     } catch {
       return { name: "remote-reachable", status: "fail", detail: `Cannot reach remote: ${url}` };
