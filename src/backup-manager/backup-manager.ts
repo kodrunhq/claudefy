@@ -20,6 +20,10 @@ export class BackupManager {
     return backupPath;
   }
 
+  getBackupPath(name: string): string {
+    return join(this.backupsDir, name);
+  }
+
   async listBackups(): Promise<string[]> {
     try {
       const entries = await readdir(this.backupsDir);

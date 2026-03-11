@@ -38,6 +38,15 @@ describe("BackupManager", () => {
     expect(command).toBe("# Test");
   });
 
+  it("resolves backup name to full path", async () => {
+    await writeFile(join(claudeDir, "settings.json"), "{}");
+    const backupManager = new BackupManager(claudefyDir);
+    const backupPath = await backupManager.createBackup(claudeDir, "test-backup");
+    const backups = await backupManager.listBackups();
+    const resolved = backupManager.getBackupPath(backups[0]);
+    expect(resolved).toBe(backupPath);
+  });
+
   it("lists existing backups", async () => {
     await writeFile(join(claudeDir, "settings.json"), "{}");
     const backupManager = new BackupManager(claudefyDir);
