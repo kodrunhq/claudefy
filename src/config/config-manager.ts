@@ -69,6 +69,12 @@ export class ConfigManager {
 
   async set(key: string, value: unknown): Promise<void> {
     const FORBIDDEN_KEYS = ["__proto__", "prototype", "constructor"];
+    const isUnsafeObject = (target: unknown): boolean => {
+      if (target === null || target === undefined) return true;
+      if (typeof target !== "object") return true;
+      // Never allow writing through or onto Object.prototype
+      return target === Object.prototype;
+    };
     const parts = key.split(".");
     for (const part of parts) {
       if (FORBIDDEN_KEYS.includes(part)) {
@@ -77,14 +83,29 @@ export class ConfigManager {
     }
     const config = await this.load();
     let obj: Record<string, unknown> = config as unknown as Record<string, unknown>;
+    // Prevent traversing into polluted objects
+    if (isUnsafeObject(obj)) {
+      throw new Error("Configuration root object is invalid or unsafe");
+    }
     for (let i = 0; i < parts.length - 1; i++) {
-      const next = obj[parts[i]];
-      if (next === undefined || next === null || typeof next !== "object") {
-        throw new Error(`Invalid config key: "${key}" — "${parts[i]}" is not an object`);
+      const segment = parts[i];
+      if (FORBIDDEN_KEYS.includes(segment)) {
+        throw new Error(`Forbidden config key segment: "${segment}"`);
+      }
+      const next = (obj as Record<string, unknown>)[segment];
+      if (isUnsafeObject(next)) {
+        throw new Error(`Invalid config key: "${key}" — "${segment}" is not a safe object`);
       }
       obj = next as Record<string, unknown>;
     }
-    obj[parts[parts.length - 1]] = value;
+    const lastSegment = parts[parts.length - 1];
+    if (FORBIDDEN_KEYS.includes(lastSegment)) {
+      throw new Error(`Forbidden config key segment: "${lastSegment}"`);
+    }
+    if (isUnsafeObject(obj)) {
+      throw new Error("Cannot assign to unsafe configuration object");
+    }
+    (obj as Record<string, unknown>)[lastSegment] = value;
     await this.saveConfig(config);
   }
 
