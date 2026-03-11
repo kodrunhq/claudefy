@@ -197,7 +197,11 @@ export class PushCommand {
   }
 
   private needsNormalization(itemName: string): boolean {
-    return ["settings.json", "history.jsonl"].includes(itemName) || itemName.startsWith("plugins/");
+    return (
+      ["settings.json", "history.jsonl"].includes(itemName) ||
+      itemName === "plugins/installed_plugins.json" ||
+      itemName === "plugins/known_marketplaces.json"
+    );
   }
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
@@ -283,6 +287,8 @@ export class PushCommand {
 
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
+      // Never sync .git directories (submodules inside plugin caches, etc.)
+      if (entry.name === ".git") continue;
       const srcPath = join(srcDir, entry.name);
 
       if (entry.isDirectory()) {
