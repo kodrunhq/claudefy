@@ -65,8 +65,8 @@ Encryption is applied in two ways:
 
 During pull, symlinks are validated:
 
-- **Top-level symlinks** in the store are skipped with a warning.
-- **Nested symlinks** are prevented by the copy strategy.
+- **Top-level symlinks** in the store are skipped with a warning during the copy-to-local step.
+- **Nested symlinks** inside the store are deleted in the temporary workspace before changes are applied.
 - **Path traversal** is checked: resolved paths must stay within `~/.claude/`.
 
 ### 6. Passphrase Handling

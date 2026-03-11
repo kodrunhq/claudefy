@@ -153,7 +153,8 @@ claudefy uses **AES-256-SIV** deterministic encryption via `@noble/ciphers`.
 **Passphrase resolution order:**
 1. `CLAUDEFY_PASSPHRASE` environment variable (recommended)
 2. OS keychain (if configured)
-3. Interactive prompt
+
+Interactive prompts only occur during `claudefy init` and `claudefy join` setup.
 
 > See [docs/encryption.md](docs/encryption.md) for the full technical deep-dive.
 

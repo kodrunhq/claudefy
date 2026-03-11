@@ -134,7 +134,7 @@ export class PushCommand {
     if (filesToEncrypt.size > 0) {
       if (!options.passphrase) {
         throw new Error(
-          "Encryption is required but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+          "Encryption is required but no passphrase found. Set CLAUDEFY_PASSPHRASE or ensure your passphrase is stored in your OS keychain (configured during 'claudefy init' or 'claudefy join').",
         );
       }
 
