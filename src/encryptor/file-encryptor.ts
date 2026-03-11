@@ -8,26 +8,28 @@ export class FileEncryptor {
     this.key = deriveFileKey(passphrase);
   }
 
-  encrypt(data: Uint8Array): string {
-    const cipher = aessiv(this.key, new Uint8Array(0));
+  encrypt(data: Uint8Array, ad: string): string {
+    const adBytes = new TextEncoder().encode(ad);
+    const cipher = aessiv(this.key, adBytes);
     const encrypted = cipher.encrypt(data);
     return Buffer.from(encrypted).toString("base64");
   }
 
-  decrypt(encoded: string): Uint8Array {
-    const cipher = aessiv(this.key, new Uint8Array(0));
+  decrypt(encoded: string, ad: string): Uint8Array {
+    const adBytes = new TextEncoder().encode(ad);
+    const cipher = aessiv(this.key, adBytes);
     const encrypted = new Uint8Array(Buffer.from(encoded, "base64"));
     return cipher.decrypt(encrypted);
   }
 
-  encryptString(text: string): string {
+  encryptString(text: string, ad: string): string {
     if (text === "") return "";
-    return this.encrypt(new TextEncoder().encode(text));
+    return this.encrypt(new TextEncoder().encode(text), ad);
   }
 
-  decryptString(encoded: string): string {
+  decryptString(encoded: string, ad: string): string {
     if (encoded === "") return "";
-    const decrypted = this.decrypt(encoded);
+    const decrypted = this.decrypt(encoded, ad);
     return new TextDecoder().decode(decrypted);
   }
 }

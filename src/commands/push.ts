@@ -178,7 +178,12 @@ export class PushCommand {
           const filesToEncrypt = new Set(findings.map((f) => f.file));
           for (const filePath of filesToEncrypt) {
             if (existsSync(filePath) && !filePath.endsWith(".age")) {
-              await encryptor.encryptFile(filePath, filePath + ".age");
+              const stagingConfig = join(stagingDir, "config");
+              const stagingUnknown = join(stagingDir, "unknown");
+              const ad = filePath.startsWith(stagingConfig)
+                ? relative(stagingConfig, filePath)
+                : relative(stagingUnknown, filePath);
+              await encryptor.encryptFile(filePath, filePath + ".age", ad);
               await rm(filePath);
             }
           }

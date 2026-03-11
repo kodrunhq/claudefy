@@ -25,11 +25,11 @@ describe("Encryptor", () => {
 
     await writeFile(srcPath, '{"key": "secret-value"}');
 
-    await encryptor.encryptFile(srcPath, encPath);
+    await encryptor.encryptFile(srcPath, encPath, "test-file");
     const encrypted = await readFile(encPath);
     expect(encrypted.toString()).not.toContain("secret-value");
 
-    await encryptor.decryptFile(encPath, decPath);
+    await encryptor.decryptFile(encPath, decPath, "test-file");
     const decrypted = await readFile(decPath, "utf-8");
     expect(decrypted).toBe('{"key": "secret-value"}');
   });
@@ -38,10 +38,10 @@ describe("Encryptor", () => {
     const encryptor = new Encryptor(passphrase);
     const original = "sensitive data here";
 
-    const encrypted = await encryptor.encryptString(original);
+    const encrypted = await encryptor.encryptString(original, "test-context");
     expect(encrypted).not.toContain("sensitive");
 
-    const decrypted = await encryptor.decryptString(encrypted);
+    const decrypted = await encryptor.decryptString(encrypted, "test-context");
     expect(decrypted).toBe(original);
   });
 
@@ -49,8 +49,8 @@ describe("Encryptor", () => {
     const encryptor1 = new Encryptor("correct-passphrase");
     const encryptor2 = new Encryptor("wrong-passphrase");
 
-    const encrypted = await encryptor1.encryptString("secret");
-    await expect(encryptor2.decryptString(encrypted)).rejects.toThrow();
+    const encrypted = await encryptor1.encryptString("secret", "test-context");
+    await expect(encryptor2.decryptString(encrypted, "test-context")).rejects.toThrow();
   });
 
   it("encrypts and decrypts a directory recursively", async () => {
@@ -100,8 +100,8 @@ describe("Encryptor", () => {
 
     await writeFile(srcPath, "deterministic test content");
 
-    await encryptor.encryptFile(srcPath, encPath1);
-    await encryptor.encryptFile(srcPath, encPath2);
+    await encryptor.encryptFile(srcPath, encPath1, "test-file");
+    await encryptor.encryptFile(srcPath, encPath2, "test-file");
 
     const enc1 = await readFile(encPath1, "utf-8");
     const enc2 = await readFile(encPath2, "utf-8");
@@ -115,7 +115,7 @@ describe("Encryptor", () => {
     const encPath = join(tempDir, "data.jsonl.age");
 
     await writeFile(srcPath, jsonlContent);
-    await encryptor.encryptFile(srcPath, encPath);
+    await encryptor.encryptFile(srcPath, encPath, "test-file");
 
     const encrypted = await readFile(encPath, "utf-8");
     // Encrypted output should have the same number of lines as input
@@ -135,7 +135,7 @@ describe("Encryptor", () => {
     const encPath = join(tempDir, "config.json.age");
 
     await writeFile(srcPath, '{\n  "key": "value"\n}\n');
-    await encryptor.encryptFile(srcPath, encPath);
+    await encryptor.encryptFile(srcPath, encPath, "test-file");
 
     const encrypted = await readFile(encPath, "utf-8");
     // File-level encryption produces a single base64 string (no newlines)
@@ -152,8 +152,8 @@ describe("Encryptor", () => {
     const decPath = join(tempDir, "data-dec.jsonl");
 
     await writeFile(srcPath, jsonlContent);
-    await encryptor.encryptFile(srcPath, encPath);
-    await encryptor.decryptFile(encPath, decPath);
+    await encryptor.encryptFile(srcPath, encPath, "test-file");
+    await encryptor.decryptFile(encPath, decPath, "test-file");
 
     const decrypted = await readFile(decPath, "utf-8");
     expect(decrypted).toBe(jsonlContent);
