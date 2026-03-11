@@ -283,6 +283,8 @@ export class PushCommand {
 
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
+      // Never sync .git directories (submodules inside plugin caches, etc.)
+      if (entry.name === ".git") continue;
       const srcPath = join(srcDir, entry.name);
 
       if (entry.isDirectory()) {

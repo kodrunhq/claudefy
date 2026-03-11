@@ -148,6 +148,15 @@ describe("SecretScanner", () => {
     expect(results[0].pattern).toBe("Datadog API Key");
   });
 
+  it("skips binary files containing null bytes", async () => {
+    const file = join(tempDir, "binary.dat");
+    // Simulate a git index file: starts with DIRC magic + null bytes
+    const buf = Buffer.from([0x44, 0x49, 0x52, 0x43, 0x00, 0x00, 0x00, 0x02]);
+    await writeFile(file, buf);
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBe(0);
+  });
+
   it("scans multiple files", async () => {
     const clean = join(tempDir, "clean.md");
     const dirty = join(tempDir, "dirty.json");
