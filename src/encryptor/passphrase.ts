@@ -98,6 +98,29 @@ export interface PassphraseSetupResult {
   storedInKeychain: boolean;
 }
 
+export async function promptExistingPassphrase(): Promise<PassphraseSetupResult | null> {
+  const passphrase = await prompt("Enter encryption passphrase: ", true);
+  if (!passphrase.trim()) {
+    return null;
+  }
+
+  let storedInKeychain = false;
+  if (isKeychainAvailable()) {
+    const storeIt = await promptYesNo("Store passphrase in OS keychain?");
+    if (storeIt) {
+      storedInKeychain = storePassphraseInKeychain(passphrase);
+    }
+  }
+
+  if (!storedInKeychain) {
+    console.log(
+      "Set CLAUDEFY_PASSPHRASE environment variable in your shell profile to avoid re-entering.",
+    );
+  }
+
+  return { passphrase, storedInKeychain };
+}
+
 export async function promptPassphraseSetup(): Promise<PassphraseSetupResult | null> {
   const wantsEncryption = await promptYesNo("Enable encryption for synced data?");
   if (!wantsEncryption) {
