@@ -8,8 +8,8 @@ describe("FileEncryptor", () => {
     const encryptor = new FileEncryptor(passphrase);
     const original = new Uint8Array([0x00, 0x01, 0x02, 0xff, 0xfe, 0xfd]);
 
-    const encrypted = encryptor.encrypt(original);
-    const decrypted = encryptor.decrypt(encrypted);
+    const encrypted = encryptor.encrypt(original, "test-file");
+    const decrypted = encryptor.decrypt(encrypted, "test-file");
 
     expect(decrypted).toEqual(original);
   });
@@ -18,8 +18,8 @@ describe("FileEncryptor", () => {
     const encryptor = new FileEncryptor(passphrase);
     const original = "Hello, world! This is a secret message.";
 
-    const encrypted = encryptor.encryptString(original);
-    const decrypted = encryptor.decryptString(encrypted);
+    const encrypted = encryptor.encryptString(original, "test-file");
+    const decrypted = encryptor.decryptString(encrypted, "test-file");
 
     expect(decrypted).toBe(original);
   });
@@ -28,8 +28,8 @@ describe("FileEncryptor", () => {
     const encryptor = new FileEncryptor(passphrase);
     const text = "deterministic test content";
 
-    const encrypted1 = encryptor.encryptString(text);
-    const encrypted2 = encryptor.encryptString(text);
+    const encrypted1 = encryptor.encryptString(text, "test-file");
+    const encrypted2 = encryptor.encryptString(text, "test-file");
 
     expect(encrypted1).toBe(encrypted2);
   });
@@ -39,14 +39,14 @@ describe("FileEncryptor", () => {
     const enc2 = new FileEncryptor(passphrase);
     const text = "cross-instance determinism";
 
-    expect(enc1.encryptString(text)).toBe(enc2.encryptString(text));
+    expect(enc1.encryptString(text, "test-file")).toBe(enc2.encryptString(text, "test-file"));
   });
 
   it("produces different output for different content", () => {
     const encryptor = new FileEncryptor(passphrase);
 
-    const encrypted1 = encryptor.encryptString("content A");
-    const encrypted2 = encryptor.encryptString("content B");
+    const encrypted1 = encryptor.encryptString("content A", "test-file");
+    const encrypted2 = encryptor.encryptString("content B", "test-file");
 
     expect(encrypted1).not.toBe(encrypted2);
   });
@@ -54,10 +54,10 @@ describe("FileEncryptor", () => {
   it("handles empty string content", () => {
     const encryptor = new FileEncryptor(passphrase);
 
-    const encrypted = encryptor.encryptString("");
+    const encrypted = encryptor.encryptString("", "test-file");
     expect(encrypted).toBe("");
 
-    const decrypted = encryptor.decryptString("");
+    const decrypted = encryptor.decryptString("", "test-file");
     expect(decrypted).toBe("");
   });
 
@@ -68,8 +68,8 @@ describe("FileEncryptor", () => {
       large[i] = i % 256;
     }
 
-    const encrypted = encryptor.encrypt(large);
-    const decrypted = encryptor.decrypt(encrypted);
+    const encrypted = encryptor.encrypt(large, "test-file");
+    const decrypted = encryptor.decrypt(encrypted, "test-file");
 
     expect(decrypted).toEqual(large);
   });
@@ -78,14 +78,14 @@ describe("FileEncryptor", () => {
     const encryptor = new FileEncryptor(passphrase);
     const wrongEncryptor = new FileEncryptor("wrong-passphrase");
 
-    const encrypted = encryptor.encryptString("secret data");
+    const encrypted = encryptor.encryptString("secret data", "test-file");
 
-    expect(() => wrongEncryptor.decryptString(encrypted)).toThrow();
+    expect(() => wrongEncryptor.decryptString(encrypted, "test-file")).toThrow();
   });
 
   it("encrypted output is valid base64", () => {
     const encryptor = new FileEncryptor(passphrase);
-    const encrypted = encryptor.encryptString("test content");
+    const encrypted = encryptor.encryptString("test content", "test-file");
 
     expect(() => Buffer.from(encrypted, "base64")).not.toThrow();
     // Re-encoding should match (valid base64 roundtrip)
@@ -97,7 +97,7 @@ describe("FileEncryptor", () => {
     const encryptor = new FileEncryptor(passphrase);
     const plaintext = "this should not appear in output";
 
-    const encrypted = encryptor.encryptString(plaintext);
+    const encrypted = encryptor.encryptString(plaintext, "test-file");
 
     expect(encrypted).not.toContain(plaintext);
   });
@@ -106,9 +106,24 @@ describe("FileEncryptor", () => {
     const encryptor = new FileEncryptor(passphrase);
     const unicode = "Hello \u4e16\u754c \ud83c\udf0d \u00e9\u00e0\u00fc\u00f1";
 
-    const encrypted = encryptor.encryptString(unicode);
-    const decrypted = encryptor.decryptString(encrypted);
+    const encrypted = encryptor.encryptString(unicode, "test-file");
+    const decrypted = encryptor.decryptString(encrypted, "test-file");
 
     expect(decrypted).toBe(unicode);
+  });
+
+  it("produces different ciphertext for different associated data", () => {
+    const encryptor = new FileEncryptor(passphrase);
+    const data = new TextEncoder().encode("same content");
+    const encrypted1 = encryptor.encrypt(data, "config/file-a.json");
+    const encrypted2 = encryptor.encrypt(data, "config/file-b.json");
+    expect(encrypted1).not.toBe(encrypted2);
+  });
+
+  it("fails to decrypt with wrong associated data", () => {
+    const encryptor = new FileEncryptor(passphrase);
+    const data = new TextEncoder().encode("secret");
+    const encrypted = encryptor.encrypt(data, "config/real-path.json");
+    expect(() => encryptor.decrypt(encrypted, "config/swapped-path.json")).toThrow();
   });
 });

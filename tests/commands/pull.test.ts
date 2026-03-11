@@ -260,6 +260,17 @@ describe("PullCommand", () => {
     expect(existsSync(tmpDir)).toBe(false);
   });
 
+  it("cleans up stale .pull-tmp from previous crash on startup", async () => {
+    const staleTmpDir = join(pullHomeDir, ".claudefy", ".pull-tmp");
+    await mkdir(staleTmpDir, { recursive: true });
+    await writeFile(join(staleTmpDir, "leaked-secret.json"), "plaintext secret");
+
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    expect(existsSync(staleTmpDir)).toBe(false);
+  });
+
   it("does not modify store files during pull", async () => {
     // First pull to set up machine branch
     const pull = new PullCommand(pullHomeDir);

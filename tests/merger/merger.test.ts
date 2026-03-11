@@ -42,29 +42,57 @@ describe("Merger", () => {
     });
   });
 
-  describe("last-write-wins", () => {
-    it("returns remote when remote is newer", () => {
-      const result = merger.lastWriteWins(
-        { content: "local", mtime: 1000 },
-        { content: "remote", mtime: 2000 },
-      );
-      expect(result).toBe("remote");
+  describe("smart array merge", () => {
+    it("unions arrays of objects by 'name' key", () => {
+      const local = {
+        items: [
+          { name: "a", value: 1 },
+          { name: "b", value: 2 },
+        ],
+      };
+      const remote = {
+        items: [
+          { name: "a", value: 10 },
+          { name: "c", value: 3 },
+        ],
+      };
+      const result = merger.deepMergeJson(local, remote);
+      expect(result.items).toEqual([
+        { name: "a", value: 10 },
+        { name: "c", value: 3 },
+        { name: "b", value: 2 },
+      ]);
     });
 
-    it("returns local when local is newer", () => {
-      const result = merger.lastWriteWins(
-        { content: "local", mtime: 2000 },
-        { content: "remote", mtime: 1000 },
-      );
-      expect(result).toBe("local");
+    it("unions arrays of objects by 'id' key", () => {
+      const local = { items: [{ id: "1", data: "local" }] };
+      const remote = { items: [{ id: "2", data: "remote" }] };
+      const result = merger.deepMergeJson(local, remote);
+      expect(result.items).toEqual([
+        { id: "2", data: "remote" },
+        { id: "1", data: "local" },
+      ]);
     });
 
-    it("returns remote on tie", () => {
-      const result = merger.lastWriteWins(
-        { content: "local", mtime: 1000 },
-        { content: "remote", mtime: 1000 },
-      );
-      expect(result).toBe("remote");
+    it("falls back to remote-wins for primitive arrays", () => {
+      const local = { tags: ["a", "b", "c"] };
+      const remote = { tags: ["x", "y"] };
+      const result = merger.deepMergeJson(local, remote);
+      expect(result.tags).toEqual(["x", "y"]);
+    });
+
+    it("falls back to remote-wins for arrays of objects without identifiable key", () => {
+      const local = { items: [{ value: 1 }, { value: 2 }] };
+      const remote = { items: [{ value: 3 }] };
+      const result = merger.deepMergeJson(local, remote);
+      expect(result.items).toEqual([{ value: 3 }]);
+    });
+
+    it("handles empty arrays", () => {
+      const local = { items: [{ name: "a", value: 1 }] };
+      const remote = { items: [] };
+      const result = merger.deepMergeJson(local, remote);
+      expect(result.items).toEqual([]);
     });
   });
 });

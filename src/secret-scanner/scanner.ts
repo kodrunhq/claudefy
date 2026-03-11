@@ -18,6 +18,14 @@ const SECRET_PATTERNS: { name: string; regex: RegExp }[] = [
     name: "Generic Secret Key",
     regex: /"(?:secret|password|token|apiKey|api_key|private_key)"\s*:\s*"[^"]{8,}"/,
   },
+  { name: "Google API Key", regex: /AIza[0-9A-Za-z\-_]{35}/ },
+  { name: "Slack Bot Token", regex: /xoxb-[0-9A-Za-z-]{50,}/ },
+  { name: "Slack User Token", regex: /xoxp-[0-9A-Za-z-]{50,}/ },
+  { name: "Stripe Live Key", regex: /sk_live_[0-9a-zA-Z]{24,}/ },
+  { name: "Stripe Test Key", regex: /sk_test_[0-9a-zA-Z]{24,}/ },
+  { name: "Azure Connection String", regex: /AccountKey=[A-Za-z0-9+/=]{44,}/ },
+  { name: "Twilio API Key", regex: /SK[0-9a-fA-F]{32}/ },
+  { name: "Datadog API Key", regex: /dd[a-z]{0,2}_[0-9a-zA-Z]{32,}/ },
 ];
 
 export class SecretScanner {

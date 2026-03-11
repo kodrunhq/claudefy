@@ -236,6 +236,22 @@ program
     }
   });
 
+program
+  .command("restore")
+  .description("Restore ~/.claude from a backup")
+  .action(async function (this: Command) {
+    try {
+      const opts = this.optsWithGlobals();
+      const quiet = opts.quiet ?? false;
+      const { RestoreCommand } = await import("./commands/restore.js");
+      const cmd = new RestoreCommand(homeDir);
+      await cmd.executeInteractive({ quiet });
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
 const configCmd = program.command("config").description("Manage claudefy configuration");
 
 configCmd

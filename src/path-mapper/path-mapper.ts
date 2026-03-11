@@ -63,25 +63,36 @@ export class PathMapper {
   }
 
   normalizeSettingsPaths<T>(settings: T, claudeDir: string): T {
-    return this.replaceInSerialized(settings, claudeDir, CLAUDE_DIR_SENTINEL);
+    return this.replaceInValues(settings, claudeDir, CLAUDE_DIR_SENTINEL);
   }
 
   remapSettingsPaths<T>(settings: T, claudeDir: string): T {
-    return this.replaceInSerialized(settings, CLAUDE_DIR_SENTINEL, claudeDir);
+    return this.replaceInValues(settings, CLAUDE_DIR_SENTINEL, claudeDir);
   }
 
   normalizePluginPaths<T>(plugins: T, claudeDir: string): T {
-    return this.replaceInSerialized(plugins, claudeDir, CLAUDE_DIR_SENTINEL);
+    return this.replaceInValues(plugins, claudeDir, CLAUDE_DIR_SENTINEL);
   }
 
   remapPluginPaths<T>(plugins: T, claudeDir: string): T {
-    return this.replaceInSerialized(plugins, CLAUDE_DIR_SENTINEL, claudeDir);
+    return this.replaceInValues(plugins, CLAUDE_DIR_SENTINEL, claudeDir);
   }
 
-  private replaceInSerialized<T>(value: T, search: string, replacement: string): T {
-    const json = JSON.stringify(value);
-    const updated = json.replaceAll(search, replacement);
-    return JSON.parse(updated) as T;
+  private replaceInValues<T>(value: T, search: string, replacement: string): T {
+    if (typeof value === "string") {
+      return value.replaceAll(search, replacement) as T;
+    }
+    if (Array.isArray(value)) {
+      return value.map((item) => this.replaceInValues(item, search, replacement)) as T;
+    }
+    if (value !== null && typeof value === "object") {
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        result[k] = this.replaceInValues(v, search, replacement);
+      }
+      return result as T;
+    }
+    return value;
   }
 
   private pathToDirName(localPath: string): string {
