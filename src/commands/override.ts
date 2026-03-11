@@ -38,7 +38,7 @@ export class OverrideCommand {
     await gitAdapter.initStore(config.backend.url);
     await gitAdapter.ensureMachineBranch(config.machineId);
     try {
-      await gitAdapter.pull();
+      await gitAdapter.pullAndMergeMain();
     } catch {
       // Fresh store with no remote history yet
     }

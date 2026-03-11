@@ -18,7 +18,7 @@ describe("Encryptor", () => {
   });
 
   it("encrypts and decrypts a file", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const srcPath = join(tempDir, "test.json");
     const encPath = join(tempDir, "test.json.age");
     const decPath = join(tempDir, "test-dec.json");
@@ -35,7 +35,7 @@ describe("Encryptor", () => {
   });
 
   it("encrypts and decrypts a string", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const original = "sensitive data here";
 
     const encrypted = await encryptor.encryptString(original, "test-context");
@@ -46,15 +46,15 @@ describe("Encryptor", () => {
   });
 
   it("fails decryption with wrong passphrase", async () => {
-    const encryptor1 = new Encryptor("correct-passphrase");
-    const encryptor2 = new Encryptor("wrong-passphrase");
+    const encryptor1 = new Encryptor("correct-passphrase", "test-repo");
+    const encryptor2 = new Encryptor("wrong-passphrase", "test-repo");
 
     const encrypted = await encryptor1.encryptString("secret", "test-context");
     await expect(encryptor2.decryptString(encrypted, "test-context")).rejects.toThrow();
   });
 
   it("encrypts and decrypts a directory recursively", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const subDir = join(tempDir, "sub");
     await mkdir(subDir, { recursive: true });
     await writeFile(join(tempDir, "a.txt"), "file-a");
@@ -78,7 +78,7 @@ describe("Encryptor", () => {
   });
 
   it("skips symlinks in directory encryption/decryption", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     await writeFile(join(tempDir, "real.txt"), "real-content");
     await symlink(join(tempDir, "real.txt"), join(tempDir, "link.txt"));
 
@@ -93,7 +93,7 @@ describe("Encryptor", () => {
   });
 
   it("produces deterministic output (same input = same ciphertext)", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const srcPath = join(tempDir, "deterministic.txt");
     const encPath1 = join(tempDir, "out1.age");
     const encPath2 = join(tempDir, "out2.age");
@@ -109,7 +109,7 @@ describe("Encryptor", () => {
   });
 
   it("uses per-line encryption for .jsonl files", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const jsonlContent = '{"a":1}\n{"b":2}\n{"c":3}\n';
     const srcPath = join(tempDir, "data.jsonl");
     const encPath = join(tempDir, "data.jsonl.age");
@@ -130,7 +130,7 @@ describe("Encryptor", () => {
   });
 
   it("uses file-level encryption for non-.jsonl files", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const srcPath = join(tempDir, "config.json");
     const encPath = join(tempDir, "config.json.age");
 
@@ -145,7 +145,7 @@ describe("Encryptor", () => {
   });
 
   it("round-trips .jsonl files through encrypt/decrypt", async () => {
-    const encryptor = new Encryptor(passphrase);
+    const encryptor = new Encryptor(passphrase, "test-repo");
     const jsonlContent = '{"a":1}\n{"b":2}\n{"c":3}\n';
     const srcPath = join(tempDir, "data.jsonl");
     const encPath = join(tempDir, "data.jsonl.age");

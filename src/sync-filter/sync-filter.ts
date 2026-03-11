@@ -1,4 +1,4 @@
-import { readdir, stat } from "node:fs/promises";
+import { readdir, lstat } from "node:fs/promises";
 import { join } from "node:path";
 import type { SyncFilterConfig } from "../config/types.js";
 import type { SyncTier, ClassifiedItem, ClassificationResult } from "./types.js";
@@ -17,7 +17,7 @@ export class SyncFilter {
     for (const entry of entries) {
       const tier = this.getTier(entry.name);
       const fullPath = join(claudeDir, entry.name);
-      const stats = await stat(fullPath);
+      const stats = await lstat(fullPath);
 
       items.push({
         name: entry.name,

@@ -31,10 +31,11 @@ describe("Path Remapping Integration", () => {
     await mkdir(claudeDirA, { recursive: true });
 
     // Settings with machine-specific paths (using claudeDir as base)
+    // Note: mcpServers is stripped as a dangerous key on pull, so we use a safe key
     await writeFile(
       join(claudeDirA, "settings.json"),
       JSON.stringify({
-        mcpServers: {
+        customPaths: {
           test: {
             command: join(claudeDirA, "plugins", "test-server", "run.sh"),
           },
@@ -65,8 +66,8 @@ describe("Path Remapping Integration", () => {
 
     // Verify paths were remapped to Machine B's claudeDir
     const settingsB = JSON.parse(await readFile(join(claudeDirB, "settings.json"), "utf-8"));
-    expect(settingsB.mcpServers?.test?.command).toBeDefined();
-    expect(settingsB.mcpServers!.test!.command!).toContain(claudeDirB);
-    expect(settingsB.mcpServers!.test!.command!).not.toContain(claudeDirA);
+    expect(settingsB.customPaths?.test?.command).toBeDefined();
+    expect(settingsB.customPaths!.test!.command!).toContain(claudeDirB);
+    expect(settingsB.customPaths!.test!.command!).not.toContain(claudeDirA);
   });
 });

@@ -4,8 +4,8 @@ import { deriveFileKey } from "./key-derivation.js";
 export class FileEncryptor {
   private key: Uint8Array;
 
-  constructor(passphrase: string) {
-    this.key = deriveFileKey(passphrase);
+  constructor(passphrase: string, repoSalt: string) {
+    this.key = deriveFileKey(passphrase, repoSalt);
   }
 
   encrypt(data: Uint8Array, ad: string): string {

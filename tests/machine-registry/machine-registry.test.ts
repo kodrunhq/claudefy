@@ -28,14 +28,14 @@ describe("MachineRegistry", () => {
     expect(machines[0].os).toBe("linux");
   });
 
-  it("updates last sync time on existing machine", async () => {
+  it("updates last sync time on re-register", async () => {
     const registry = new MachineRegistry(manifestPath);
     await registry.register("nuc-i7-abc123", "nuc-i7", "linux");
     const before = (await registry.list())[0].lastSync;
 
     // Small delay to ensure different timestamp
     await new Promise((r) => setTimeout(r, 10));
-    await registry.updateLastSync("nuc-i7-abc123");
+    await registry.register("nuc-i7-abc123", "nuc-i7", "linux");
     const after = (await registry.list())[0].lastSync;
 
     expect(after).not.toBe(before);

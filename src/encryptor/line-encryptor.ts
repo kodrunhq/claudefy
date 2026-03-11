@@ -4,8 +4,8 @@ import { deriveLineKey } from "./key-derivation.js";
 export class LineEncryptor {
   private key: Uint8Array;
 
-  constructor(passphrase: string) {
-    this.key = deriveLineKey(passphrase);
+  constructor(passphrase: string, repoSalt: string) {
+    this.key = deriveLineKey(passphrase, repoSalt);
   }
 
   encryptLine(line: string, ad: string): string {

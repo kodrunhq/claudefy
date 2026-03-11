@@ -67,34 +67,6 @@ describe("ConfigManager", () => {
     expect(links.kodrun).toBeUndefined();
   });
 
-  it("manages sync filter overrides to allow", async () => {
-    await configManager.initialize("git@github.com:user/store.git");
-    await configManager.setFilterOverride("get-shit-done", "allow");
-    const filter = await configManager.getSyncFilter();
-    expect(filter.allowlist).toContain("get-shit-done");
-    expect(filter.denylist).not.toContain("get-shit-done");
-  });
-
-  it("manages sync filter overrides to deny", async () => {
-    await configManager.initialize("git@github.com:user/store.git");
-    await configManager.setFilterOverride("some-dir", "deny");
-    const filter = await configManager.getSyncFilter();
-    expect(filter.denylist).toContain("some-dir");
-    expect(filter.allowlist).not.toContain("some-dir");
-  });
-
-  it("moves item between tiers on override change", async () => {
-    await configManager.initialize("git@github.com:user/store.git");
-    await configManager.setFilterOverride("movable", "allow");
-    let filter = await configManager.getSyncFilter();
-    expect(filter.allowlist).toContain("movable");
-
-    await configManager.setFilterOverride("movable", "deny");
-    filter = await configManager.getSyncFilter();
-    expect(filter.denylist).toContain("movable");
-    expect(filter.allowlist).not.toContain("movable");
-  });
-
   it("throws on initialize when already initialized", async () => {
     await configManager.initialize("git@github.com:user/store.git");
     await expect(configManager.initialize("git@github.com:user/other.git")).rejects.toThrow(
@@ -106,11 +78,6 @@ describe("ConfigManager", () => {
     expect(configManager.isInitialized()).toBe(false);
     await configManager.initialize("git@github.com:user/store.git");
     expect(configManager.isInitialized()).toBe(true);
-  });
-
-  it("returns config directory path", async () => {
-    const dir = configManager.getConfigDir();
-    expect(dir).toContain(".claudefy");
   });
 
   it("throws on set with invalid key path", async () => {

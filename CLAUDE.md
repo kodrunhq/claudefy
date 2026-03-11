@@ -33,12 +33,13 @@ Claudefy is a CLI tool that syncs `~/.claude` config across machines via a git b
 
 ### Key design decisions
 
-- **Per-machine branches:** Each machine gets its own git branch (named by machineId). Changes merge into `main`. Pull merges `main` into the machine branch.
+- **Per-machine branches:** Each machine gets its own git branch (named `machines/<machineId>`). Changes merge into `main`. Pull merges `main` into the machine branch.
 - **Three-tier sync filter:** Files in `~/.claude` are classified as `allow` (always sync), `deny` (never sync), or `unknown` (sync to separate `unknown/` dir in store).
 - **Two encryption strategies:** JSONL files use line-level encryption (preserving line structure for git diffs). All other files use whole-file encryption. Both produce `.age` output files.
-- **Path normalization:** Absolute paths in settings.json, plugins, and project directory names are converted to canonical form (`~` or link aliases) for portability between machines.
+- **Path normalization:** Absolute paths in settings.json, plugins, and project directory names are converted to canonical form using `@@CLAUDE_DIR@@` and `@@alias@@` sentinels for portability between machines.
 - **Override flow:** `override --confirm` wipes the remote store and pushes local as source of truth. Other machines detect the `.override` marker file on next pull, create a backup, and reset.
-- **Hooks security:** Remote `hooks` key is always stripped from settings.json during pull to prevent code injection.
+- **Hooks security:** Remote `hooks`, `mcpServers`, `env`, `permissions`, `allowedTools`, and `apiKeyHelper` keys are stripped from settings.json during pull to prevent code injection.
+- **Encryption:** Reactive — only files where the secret scanner detects a match are encrypted. Files without detected secrets are stored in plaintext even when `encryption.enabled` is true. PBKDF2-SHA256 with 600k iterations and per-repo salt derived from the backend URL (normalized to `host/path` form so SSH and HTTPS URLs produce the same key).
 
 ### Store layout (inside `~/.claudefy/store/`)
 
@@ -56,7 +57,7 @@ manifest.json     # Machine registry
 
 - `src/cli.ts` — Commander-based CLI entry point; resolves passphrase from env/keychain before dispatching to commands
 - `src/commands/` — Each command is a class with an `execute()` method. `init`/`join` are first-time setup; `push`/`pull` are the core sync operations.
-- `src/encryptor/` — `LineEncryptor` (JSONL, deterministic per-line), `FileEncryptor` (binary, XChaCha20-Poly1305), `Encryptor` (facade that picks strategy by file type)
+- `src/encryptor/` — `LineEncryptor` (JSONL, deterministic per-line), `FileEncryptor` (binary, AES-SIV), `Encryptor` (facade that picks strategy by file type)
 - `src/path-mapper/` — Bidirectional path remapping using project links (`~/.claudefy/links.json`)
 - `src/git-adapter/` — Wraps `simple-git` for bare repo operations, machine branching, and merge strategies
 

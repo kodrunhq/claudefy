@@ -1,26 +1,33 @@
 import deepmerge from "deepmerge";
 
 export class Merger {
-  deepMergeJson(local: Record<string, any>, remote: Record<string, any>): Record<string, any> {
+  deepMergeJson(
+    local: Record<string, unknown>,
+    remote: Record<string, unknown>,
+  ): Record<string, unknown> {
     return deepmerge(local, remote, {
-      arrayMerge: (target, source) => {
+      arrayMerge: (target: unknown[], source: unknown[]) => {
         const key = this.findArrayKey(source);
         if (!key) return source;
 
-        const remoteKeys = new Set(source.map((item: any) => item[key]));
-        const localOnly = target.filter((item: any) => !remoteKeys.has(item[key]));
+        const remoteKeys = new Set(source.map((item) => (item as Record<string, unknown>)[key]));
+        const localOnly = target.filter(
+          (item) => !remoteKeys.has((item as Record<string, unknown>)[key]),
+        );
         return [...source, ...localOnly];
       },
     });
   }
 
-  private findArrayKey(arr: any[]): string | null {
+  private findArrayKey(arr: unknown[]): string | null {
     if (arr.length === 0 || typeof arr[0] !== "object" || arr[0] === null) return null;
     for (const candidate of ["name", "id", "key"]) {
       if (
         arr.every(
-          (item: any) =>
-            item !== null && typeof item === "object" && typeof item[candidate] === "string",
+          (item) =>
+            item !== null &&
+            typeof item === "object" &&
+            typeof (item as Record<string, unknown>)[candidate] === "string",
         )
       ) {
         return candidate;

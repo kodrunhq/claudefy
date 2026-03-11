@@ -7,9 +7,9 @@ export class Encryptor {
   private lineEncryptor: LineEncryptor;
   private fileEncryptor: FileEncryptor;
 
-  constructor(passphrase: string) {
-    this.lineEncryptor = new LineEncryptor(passphrase);
-    this.fileEncryptor = new FileEncryptor(passphrase);
+  constructor(passphrase: string, repoSalt: string) {
+    this.lineEncryptor = new LineEncryptor(passphrase, repoSalt);
+    this.fileEncryptor = new FileEncryptor(passphrase, repoSalt);
   }
 
   private isJsonlFile(filePath: string): boolean {

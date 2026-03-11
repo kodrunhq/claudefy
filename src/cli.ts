@@ -328,6 +328,21 @@ hooksCmd
   });
 
 hooksCmd
+  .command("status")
+  .description("Check if auto-sync hooks are installed")
+  .action(async () => {
+    try {
+      const { HooksCommand } = await import("./commands/hooks.js");
+      const cmd = new HooksCommand(homeDir);
+      const installed = await cmd.isInstalled();
+      console.log(installed ? "Hooks are installed" : "Hooks are not installed");
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
+hooksCmd
   .command("remove")
   .description("Remove auto-sync hooks")
   .action(async () => {
