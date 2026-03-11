@@ -73,7 +73,8 @@ describe("SecretScanner", () => {
 
   it("detects Google API keys", async () => {
     const file = join(tempDir, "config.json");
-    await writeFile(file, JSON.stringify({ key: "AIzaSyA1234567890abcdefghijklmnopqrstuv" }));
+    const googleKey = "AIza" + "SyA1234567890abcdefghijklmnopqrstuv";
+    await writeFile(file, JSON.stringify({ key: googleKey }));
     const results = await scanner.scanFile(file);
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].pattern).toBe("Google API Key");

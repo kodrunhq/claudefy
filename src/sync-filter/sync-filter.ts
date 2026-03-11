@@ -3,6 +3,10 @@ import { join } from "node:path";
 import type { SyncFilterConfig } from "../config/types.js";
 import type { SyncTier, ClassifiedItem, ClassificationResult } from "./types.js";
 
+// Items that are always denied regardless of user configuration.
+// These contain sensitive credentials and must never be synced.
+const HARDCODED_DENYLIST = [".credentials.json"];
+
 export class SyncFilter {
   private config: SyncFilterConfig;
 
@@ -36,6 +40,7 @@ export class SyncFilter {
   }
 
   getTier(name: string): SyncTier {
+    if (HARDCODED_DENYLIST.includes(name)) return "deny";
     if (this.config.allowlist.includes(name)) return "allow";
     if (this.config.denylist.includes(name)) return "deny";
     return "unknown";
