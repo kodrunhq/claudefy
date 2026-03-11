@@ -149,6 +149,20 @@ describe("PathMapper", () => {
     });
   });
 
+  describe("settings path key preservation", () => {
+    it("does not modify object keys that contain the path", () => {
+      const settings = {
+        "/home/user/.claude/hooks": {
+          enabled: true,
+        },
+      };
+      const claudeDir = "/home/user/.claude";
+      const result = mapper.normalizeSettingsPaths(settings, claudeDir);
+      expect(result["/home/user/.claude/hooks"]).toBeDefined();
+      expect(result["/home/user/.claude/hooks"].enabled).toBe(true);
+    });
+  });
+
   describe("installed_plugins.json path remapping", () => {
     it("normalizes installPath on push", () => {
       const plugins = {
