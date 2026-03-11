@@ -65,7 +65,7 @@ describe("FileEncryptor", () => {
     expect(decrypted).toBe("");
   });
 
-  it("handles large content (1MB)", { timeout: 30_000 }, () => {
+  it("handles large content (1MB)", () => {
     const encryptor = new FileEncryptor(passphrase, "test-repo");
     const large = new Uint8Array(1024 * 1024);
     for (let i = 0; i < large.length; i++) {

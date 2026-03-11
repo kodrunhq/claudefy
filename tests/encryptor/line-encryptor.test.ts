@@ -150,7 +150,7 @@ describe("LineEncryptor", () => {
   });
 
   describe("wrong passphrase", () => {
-    it("should throw when decrypting with wrong passphrase", { timeout: 30_000 }, () => {
+    it("should throw when decrypting with wrong passphrase", () => {
       const enc1 = new LineEncryptor("correct-passphrase", "test-repo");
       const enc2 = new LineEncryptor("wrong-passphrase", "test-repo");
       const encrypted = enc1.encryptLine("secret data", "test-file");
