@@ -297,4 +297,24 @@ describe("PushCommand", () => {
 
     await rm(verifyDir, { recursive: true, force: true });
   });
+
+  it("skips unchanged files on second push (incremental)", async () => {
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    const storePath = join(homeDir, ".claudefy", "store");
+    const settingsPath = join(storePath, "config", "settings.json");
+    const { stat: fsStat } = await import("node:fs/promises");
+    const stat1 = await fsStat(settingsPath);
+    const mtime1 = stat1.mtimeMs;
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    const stat2 = await fsStat(settingsPath);
+    const mtime2 = stat2.mtimeMs;
+
+    expect(mtime2).toBe(mtime1);
+  });
 });

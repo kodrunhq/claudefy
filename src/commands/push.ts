@@ -1,4 +1,5 @@
-import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
@@ -65,150 +66,85 @@ export class PushCommand {
     }
 
     const storePath = gitAdapter.getStorePath();
-    const stagingDir = join(storePath, ".staging");
     const configDir = join(storePath, "config");
     const unknownDir = join(storePath, "unknown");
 
-    try {
-      // 3. Clean staging dir
-      if (existsSync(stagingDir)) await rm(stagingDir, { recursive: true });
-      await mkdir(join(stagingDir, "config"), { recursive: true });
-      await mkdir(join(stagingDir, "unknown"), { recursive: true });
+    // 3. Build path mapper
+    const links = await this.configManager.getLinks();
+    const pathMapper = new PathMapper(links);
 
-      // 4. Copy allowlisted items to staging
-      for (const item of classification.allowlist) {
-        const src = join(this.claudeDir, item.name);
-        const dest = join(stagingDir, "config", item.name);
-        await cp(src, dest, { recursive: true });
-      }
+    // 4. Hash existing store files
+    const configHashes = await this.collectStoreHashes(configDir);
+    const unknownHashes = await this.collectStoreHashes(unknownDir);
 
-      // 5. Copy unknown items to staging
-      for (const item of classification.unknown) {
-        const src = join(this.claudeDir, item.name);
-        const dest = join(stagingDir, "unknown", item.name);
-        await cp(src, dest, { recursive: true });
-      }
+    // 5. Incremental sync — write only changed files
+    const changedFiles: string[] = [];
 
-      // 6. Normalize paths in staging
-      const links = await this.configManager.getLinks();
-      const pathMapper = new PathMapper(links);
+    await mkdir(configDir, { recursive: true });
+    await mkdir(unknownDir, { recursive: true });
 
-      // settings.json
-      const settingsPath = join(stagingDir, "config", "settings.json");
-      if (existsSync(settingsPath)) {
-        const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
-        const normalized = pathMapper.normalizeSettingsPaths(settings, this.claudeDir);
-        await writeFile(settingsPath, JSON.stringify(normalized, null, 2));
-      }
+    // Track which top-level items are being synced for deletion detection
+    const syncedConfigItems: string[] = [];
+    const syncedUnknownItems: string[] = [];
 
-      // installed_plugins.json
-      const pluginsJsonPath = join(stagingDir, "config", "plugins", "installed_plugins.json");
-      if (existsSync(pluginsJsonPath)) {
-        const plugins = JSON.parse(await readFile(pluginsJsonPath, "utf-8"));
-        const normalized = pathMapper.normalizePluginPaths(plugins, this.claudeDir);
-        await writeFile(pluginsJsonPath, JSON.stringify(normalized, null, 2));
-      }
-
-      // known_marketplaces.json
-      const marketplacesPath = join(stagingDir, "config", "plugins", "known_marketplaces.json");
-      if (existsSync(marketplacesPath)) {
-        const mp = JSON.parse(await readFile(marketplacesPath, "utf-8"));
-        const normalized = pathMapper.normalizePluginPaths(mp, this.claudeDir);
-        await writeFile(marketplacesPath, JSON.stringify(normalized, null, 2));
-      }
-
-      // history.jsonl
-      const historyPath = join(stagingDir, "config", "history.jsonl");
-      if (existsSync(historyPath)) {
-        const content = await readFile(historyPath, "utf-8");
-        const normalized =
-          content
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => pathMapper.normalizeJsonlLine(line))
-            .join("\n") + "\n";
-        await writeFile(historyPath, normalized);
-      }
-
-      // projects/ directory renaming with path traversal check
-      const projectsDir = join(stagingDir, "config", "projects");
-      if (existsSync(projectsDir)) {
-        const projectDirs = await readdir(projectsDir);
-        for (const dirName of projectDirs) {
-          const canonicalId = pathMapper.normalizeDirName(dirName);
-          if (canonicalId) {
-            const destPath = resolve(join(projectsDir, canonicalId));
-            const rel = relative(resolve(projectsDir), destPath);
-            if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
-              if (!options.quiet) {
-                output.warn(
-                  `Skipping directory rename "${dirName}": path escapes projects directory`,
-                );
-              }
-              continue;
-            }
-            await rename(join(projectsDir, dirName), destPath);
-          }
-        }
-      }
-
-      // 7. Scan for secrets and encrypt files that contain them (in staging)
-      if (!options.skipSecretScan) {
-        const scanner = new SecretScanner();
-        const allFiles = [
-          ...(await this.collectFiles(join(stagingDir, "config"))),
-          ...(await this.collectFiles(join(stagingDir, "unknown"))),
-        ];
-        const findings = await scanner.scanFiles(allFiles);
-
-        if (findings.length > 0) {
-          if (!config.encryption.enabled || options.skipEncryption) {
-            const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
-            throw new Error(
-              `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nEnable encryption or use --skip-secret-scan to bypass scanning.`,
-            );
-          }
-          if (!options.passphrase) {
-            throw new Error(
-              "Secrets detected and encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
-            );
-          }
-
-          const encryptor = new Encryptor(options.passphrase);
-          const filesToEncrypt = new Set(findings.map((f) => f.file));
-          for (const filePath of filesToEncrypt) {
-            if (existsSync(filePath) && !filePath.endsWith(".age")) {
-              const stagingConfig = join(stagingDir, "config");
-              const stagingUnknown = join(stagingDir, "unknown");
-              const ad = filePath.startsWith(stagingConfig)
-                ? relative(stagingConfig, filePath)
-                : relative(stagingUnknown, filePath);
-              await encryptor.encryptFile(filePath, filePath + ".age", ad);
-              await rm(filePath);
-            }
-          }
-
-          if (!options.quiet) {
-            output.info(`Encrypted ${filesToEncrypt.size} file(s) containing potential secrets.`);
-          }
-        }
-      }
-
-      // 8. Swap staging into real dirs
-      if (existsSync(configDir)) await rm(configDir, { recursive: true });
-      if (existsSync(unknownDir)) await rm(unknownDir, { recursive: true });
-      await rename(join(stagingDir, "config"), configDir);
-      await rename(join(stagingDir, "unknown"), unknownDir);
-    } finally {
-      if (existsSync(stagingDir)) await rm(stagingDir, { recursive: true });
+    for (const item of classification.allowlist) {
+      syncedConfigItems.push(item.name);
+      const src = join(this.claudeDir, item.name);
+      await this.syncItem(src, configDir, item.name, configHashes, changedFiles, pathMapper);
     }
 
-    // 9. Conditional manifest update
+    for (const item of classification.unknown) {
+      syncedUnknownItems.push(item.name);
+      const src = join(this.claudeDir, item.name);
+      await this.syncItem(src, unknownDir, item.name, unknownHashes, changedFiles, null);
+    }
+
+    // 6. Detect deletions — remove store entries not present in source
+    await this.removeDeleted(configDir, syncedConfigItems);
+    await this.removeDeleted(unknownDir, syncedUnknownItems);
+
+    // 7. Scan for secrets and encrypt files that contain them
+    if (!options.skipSecretScan && changedFiles.length > 0) {
+      const scanner = new SecretScanner();
+      const findings = await scanner.scanFiles(changedFiles);
+
+      if (findings.length > 0) {
+        if (!config.encryption.enabled || options.skipEncryption) {
+          const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+          throw new Error(
+            `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nEnable encryption or use --skip-secret-scan to bypass scanning.`,
+          );
+        }
+        if (!options.passphrase) {
+          throw new Error(
+            "Secrets detected and encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+          );
+        }
+
+        const encryptor = new Encryptor(options.passphrase);
+        const filesToEncrypt = new Set(findings.map((f) => f.file));
+        for (const filePath of filesToEncrypt) {
+          if (existsSync(filePath) && !filePath.endsWith(".age")) {
+            const ad = filePath.startsWith(configDir)
+              ? relative(configDir, filePath)
+              : relative(unknownDir, filePath);
+            await encryptor.encryptFile(filePath, filePath + ".age", ad);
+            await rm(filePath);
+          }
+        }
+
+        if (!options.quiet) {
+          output.info(`Encrypted ${filesToEncrypt.size} file(s) containing potential secrets.`);
+        }
+      }
+    }
+
+    // 8. Conditional manifest update
     const hasRealChanges = !(await gitAdapter.isClean());
     const registry = new MachineRegistry(join(storePath, "manifest.json"));
     await registry.conditionalRegister(config.machineId, hostname(), platform(), hasRealChanges);
 
-    // 10. Commit and push with branch support
+    // 9. Commit and push with branch support
     const commitResult = await gitAdapter.commitAndPush(
       `sync: push from ${config.machineId}`,
       config.machineId,
@@ -224,6 +160,191 @@ export class PushCommand {
         output.warn("Unable to merge machine branch into main. You may need to resolve conflicts.");
       }
       output.success("Push complete.");
+    }
+  }
+
+  private async hashFile(filePath: string): Promise<string> {
+    const content = await readFile(filePath);
+    return createHash("sha256").update(content).digest("hex");
+  }
+
+  private async hashContent(content: string | Buffer): Promise<string> {
+    return createHash("sha256").update(content).digest("hex");
+  }
+
+  private async collectStoreHashes(
+    dirPath: string,
+    prefix: string = "",
+  ): Promise<Map<string, string>> {
+    const hashes = new Map<string, string>();
+    if (!existsSync(dirPath)) return hashes;
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        const sub = await this.collectStoreHashes(fullPath, relPath);
+        for (const [k, v] of sub) hashes.set(k, v);
+      } else if (!entry.isSymbolicLink()) {
+        hashes.set(relPath, await this.hashFile(fullPath));
+      }
+    }
+    return hashes;
+  }
+
+  private needsNormalization(itemName: string): boolean {
+    return (
+      ["settings.json", "history.jsonl"].includes(itemName) || itemName.startsWith("plugins/")
+    );
+  }
+
+  private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
+    if (itemName === "settings.json") {
+      const parsed = JSON.parse(text);
+      const normalized = pathMapper.normalizeSettingsPaths(parsed, this.claudeDir);
+      return JSON.stringify(normalized, null, 2);
+    }
+    if (
+      itemName === "plugins/installed_plugins.json" ||
+      itemName === "plugins/known_marketplaces.json"
+    ) {
+      const parsed = JSON.parse(text);
+      const normalized = pathMapper.normalizePluginPaths(parsed, this.claudeDir);
+      return JSON.stringify(normalized, null, 2);
+    }
+    if (itemName === "history.jsonl") {
+      return (
+        text
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => pathMapper.normalizeJsonlLine(line))
+          .join("\n") + "\n"
+      );
+    }
+    return text;
+  }
+
+  private async syncItem(
+    srcPath: string,
+    destBaseDir: string,
+    itemName: string,
+    storeHashes: Map<string, string>,
+    changedFiles: string[],
+    pathMapper: PathMapper | null,
+  ): Promise<void> {
+    const srcStat = await stat(srcPath);
+
+    if (srcStat.isFile()) {
+      let content: Buffer;
+      if (pathMapper && this.needsNormalization(itemName)) {
+        const text = await readFile(srcPath, "utf-8");
+        content = Buffer.from(this.normalizeContent(itemName, text, pathMapper));
+      } else {
+        content = await readFile(srcPath);
+      }
+      const hash = await this.hashContent(content);
+      const storeHash = storeHashes.get(itemName);
+      if (hash !== storeHash) {
+        const destPath = join(destBaseDir, itemName);
+        const parentDir = join(destPath, "..");
+        await mkdir(parentDir, { recursive: true });
+        await writeFile(destPath, content);
+        changedFiles.push(destPath);
+      }
+    } else if (srcStat.isDirectory()) {
+      await this.syncDirectory(srcPath, destBaseDir, itemName, storeHashes, changedFiles, pathMapper);
+    }
+  }
+
+  private async syncDirectory(
+    srcDir: string,
+    destBaseDir: string,
+    itemName: string,
+    storeHashes: Map<string, string>,
+    changedFiles: string[],
+    pathMapper: PathMapper | null,
+  ): Promise<void> {
+    const destDir = join(destBaseDir, itemName);
+    await mkdir(destDir, { recursive: true });
+    const entries = await readdir(srcDir, { withFileTypes: true });
+
+    // Track children for deletion detection within this directory
+    const childNames: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const srcPath = join(srcDir, entry.name);
+
+      if (entry.isDirectory()) {
+        // Handle projects/ directory renaming
+        if (itemName === "projects" && pathMapper) {
+          const canonicalName = pathMapper.normalizeDirName(entry.name);
+          if (canonicalName) {
+            // Path traversal check
+            const destPath = resolve(join(destDir, canonicalName));
+            const rel = relative(resolve(destDir), destPath);
+            if (rel.startsWith("..") || resolve(destPath) === resolve(destDir)) {
+              continue;
+            }
+            const canonicalChildName = `${itemName}/${canonicalName}`;
+            childNames.push(canonicalName);
+            await this.syncDirectory(
+              srcPath,
+              destBaseDir,
+              canonicalChildName,
+              storeHashes,
+              changedFiles,
+              pathMapper,
+            );
+            continue;
+          }
+        }
+        childNames.push(entry.name);
+        const childName = `${itemName}/${entry.name}`;
+        await this.syncDirectory(srcPath, destBaseDir, childName, storeHashes, changedFiles, pathMapper);
+      } else {
+        childNames.push(entry.name);
+        const childName = `${itemName}/${entry.name}`;
+        let content: Buffer;
+        if (pathMapper && this.needsNormalization(childName)) {
+          const text = await readFile(srcPath, "utf-8");
+          content = Buffer.from(this.normalizeContent(childName, text, pathMapper));
+        } else {
+          content = await readFile(srcPath);
+        }
+        const hash = await this.hashContent(content);
+        const storeHash = storeHashes.get(childName);
+        if (hash !== storeHash) {
+          const destPath = join(destBaseDir, childName);
+          await mkdir(join(destPath, ".."), { recursive: true });
+          await writeFile(destPath, content);
+          changedFiles.push(destPath);
+        }
+      }
+    }
+
+    // Remove files/dirs in the store directory that no longer exist in source
+    if (existsSync(destDir)) {
+      const storeEntries = await readdir(destDir);
+      const childSet = new Set(childNames);
+      for (const storeEntry of storeEntries) {
+        const baseName = storeEntry.endsWith(".age") ? storeEntry.slice(0, -4) : storeEntry;
+        if (!childSet.has(baseName) && !childSet.has(storeEntry)) {
+          await rm(join(destDir, storeEntry), { recursive: true });
+        }
+      }
+    }
+  }
+
+  private async removeDeleted(storeDir: string, currentItems: string[]): Promise<void> {
+    if (!existsSync(storeDir)) return;
+    const entries = await readdir(storeDir);
+    const currentSet = new Set(currentItems);
+    for (const entry of entries) {
+      const baseName = entry.endsWith(".age") ? entry.slice(0, -4) : entry;
+      if (!currentSet.has(baseName) && !currentSet.has(entry)) {
+        await rm(join(storeDir, entry), { recursive: true });
+      }
     }
   }
 
