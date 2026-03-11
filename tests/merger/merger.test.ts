@@ -41,30 +41,4 @@ describe("Merger", () => {
       expect(result.hooks.PostToolUse).toBeDefined();
     });
   });
-
-  describe("last-write-wins", () => {
-    it("returns remote when remote is newer", () => {
-      const result = merger.lastWriteWins(
-        { content: "local", mtime: 1000 },
-        { content: "remote", mtime: 2000 },
-      );
-      expect(result).toBe("remote");
-    });
-
-    it("returns local when local is newer", () => {
-      const result = merger.lastWriteWins(
-        { content: "local", mtime: 2000 },
-        { content: "remote", mtime: 1000 },
-      );
-      expect(result).toBe("local");
-    });
-
-    it("returns remote on tie", () => {
-      const result = merger.lastWriteWins(
-        { content: "local", mtime: 1000 },
-        { content: "remote", mtime: 1000 },
-      );
-      expect(result).toBe("remote");
-    });
-  });
 });
