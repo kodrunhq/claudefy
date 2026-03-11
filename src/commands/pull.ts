@@ -1,6 +1,6 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { simpleGit } from "simple-git";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -89,6 +89,17 @@ export class PullCommand {
     const tmpDir = join(claudefyDir, ".pull-tmp");
     if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true });
     await mkdir(tmpDir, { recursive: true });
+
+    const cleanup = () => {
+      try {
+        rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // Best effort
+      }
+      process.exit(1);
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
 
     try {
       // 4. Copy store to temp dir
@@ -256,6 +267,8 @@ export class PullCommand {
       }
     } finally {
       if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true });
+      process.removeListener("SIGINT", cleanup);
+      process.removeListener("SIGTERM", cleanup);
     }
 
     // NO re-encryption step (store is never modified)
