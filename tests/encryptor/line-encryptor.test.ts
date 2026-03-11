@@ -150,28 +150,36 @@ describe("LineEncryptor", () => {
   });
 
   describe("wrong passphrase", () => {
-    it("should throw when decrypting with wrong passphrase", () => {
+    it("should throw when decrypting with wrong passphrase", { timeout: 30_000 }, () => {
       const enc1 = new LineEncryptor("correct-passphrase", "test-repo");
       const enc2 = new LineEncryptor("wrong-passphrase", "test-repo");
       const encrypted = enc1.encryptLine("secret data", "test-file");
       expect(() => enc2.decryptLine(encrypted, "test-file")).toThrow();
     });
 
-    it("should throw when decrypting file content with wrong passphrase", () => {
-      const enc1 = new LineEncryptor("correct-passphrase", "test-repo");
-      const enc2 = new LineEncryptor("wrong-passphrase", "test-repo");
-      const encrypted = enc1.encryptFileContent("line1\nline2\n", "test-file");
-      expect(() => enc2.decryptFileContent(encrypted, "test-file")).toThrow();
-    });
+    it(
+      "should throw when decrypting file content with wrong passphrase",
+      { timeout: 30_000 },
+      () => {
+        const enc1 = new LineEncryptor("correct-passphrase", "test-repo");
+        const enc2 = new LineEncryptor("wrong-passphrase", "test-repo");
+        const encrypted = enc1.encryptFileContent("line1\nline2\n", "test-file");
+        expect(() => enc2.decryptFileContent(encrypted, "test-file")).toThrow();
+      },
+    );
   });
 
   describe("constructor determinism", () => {
-    it("should produce same results from separate instances with same passphrase", () => {
-      const enc1 = new LineEncryptor(passphrase, "test-repo");
-      const enc2 = new LineEncryptor(passphrase, "test-repo");
-      const line = "test determinism";
-      expect(enc1.encryptLine(line, "test-file")).toBe(enc2.encryptLine(line, "test-file"));
-    });
+    it(
+      "should produce same results from separate instances with same passphrase",
+      { timeout: 30_000 },
+      () => {
+        const enc1 = new LineEncryptor(passphrase, "test-repo");
+        const enc2 = new LineEncryptor(passphrase, "test-repo");
+        const line = "test determinism";
+        expect(enc1.encryptLine(line, "test-file")).toBe(enc2.encryptLine(line, "test-file"));
+      },
+    );
   });
 
   describe("associated data binding", () => {

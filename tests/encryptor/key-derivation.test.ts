@@ -40,8 +40,12 @@ describe("normalizeRepoUrl", () => {
     expect(ssh).toBe(https);
   });
 
-  it("handles bare path (local filesystem)", () => {
-    expect(normalizeRepoUrl("/tmp/my-repo.git")).toBe("/tmp/my-repo");
+  it("handles bare path (local filesystem) preserving case", () => {
+    expect(normalizeRepoUrl("/tmp/My-Repo.git")).toBe("/tmp/My-Repo");
+  });
+
+  it("handles .git followed by trailing slash", () => {
+    expect(normalizeRepoUrl("https://github.com/user/repo.git/")).toBe("github.com/user/repo");
   });
 
   it("trims whitespace", () => {

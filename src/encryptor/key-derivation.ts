@@ -18,27 +18,35 @@ const KEY_LENGTH_BYTES = 32;
 export function normalizeRepoUrl(url: string): string {
   let normalized = url.trim();
 
+  // Detect whether the input looks like a URL (has scheme or SSH shorthand)
+  let isUrl = false;
+
   // SSH shorthand: git@host:path -> host/path
   const sshShorthand = /^[\w.-]+@([\w.-]+):(.+)$/;
   const sshMatch = normalized.match(sshShorthand);
   if (sshMatch) {
     normalized = `${sshMatch[1]}/${sshMatch[2]}`;
-  } else {
+    isUrl = true;
+  } else if (/^[a-z+]+:\/\//.test(normalized)) {
     // Standard URL: strip scheme and userinfo
+    isUrl = true;
     normalized = normalized.replace(/^[a-z+]+:\/\//, "");
     normalized = normalized.replace(/^[^@]+@/, "");
   }
 
-  // Strip trailing .git
-  normalized = normalized.replace(/\.git$/, "");
-  // Strip trailing slashes
+  // Strip trailing slashes first, then .git (handles repo.git/ correctly)
   normalized = normalized.replace(/\/+$/, "");
-  // Lowercase the host portion (everything before the first /)
-  const slashIdx = normalized.indexOf("/");
-  if (slashIdx > 0) {
-    normalized = normalized.slice(0, slashIdx).toLowerCase() + normalized.slice(slashIdx);
-  } else {
-    normalized = normalized.toLowerCase();
+  normalized = normalized.replace(/\.git$/, "");
+  normalized = normalized.replace(/\/+$/, "");
+
+  // Lowercase the host portion only for URL-like inputs (not local paths)
+  if (isUrl) {
+    const slashIdx = normalized.indexOf("/");
+    if (slashIdx > 0) {
+      normalized = normalized.slice(0, slashIdx).toLowerCase() + normalized.slice(slashIdx);
+    } else {
+      normalized = normalized.toLowerCase();
+    }
   }
 
   return normalized;
