@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/github/actions/workflow/status/kodrunhq/claudefy/ci.yml?branch=main&label=CI" alt="CI" />
   <img src="https://img.shields.io/node/v/@kodrunhq/claudefy" alt="node version" />
   <img src="https://img.shields.io/github/license/kodrunhq/claudefy" alt="license" />
-  <img src="https://img.shields.io/npm/dm/@kodrunhq/claudefy?color=green" alt="downloads" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-blue?logo=typescript&logoColor=white" alt="TypeScript" />
 </p>
 
 <h1 align="center">claudefy</h1>
