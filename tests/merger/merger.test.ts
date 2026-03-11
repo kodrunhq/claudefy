@@ -44,8 +44,18 @@ describe("Merger", () => {
 
   describe("smart array merge", () => {
     it("unions arrays of objects by 'name' key", () => {
-      const local = { items: [{ name: "a", value: 1 }, { name: "b", value: 2 }] };
-      const remote = { items: [{ name: "a", value: 10 }, { name: "c", value: 3 }] };
+      const local = {
+        items: [
+          { name: "a", value: 1 },
+          { name: "b", value: 2 },
+        ],
+      };
+      const remote = {
+        items: [
+          { name: "a", value: 10 },
+          { name: "c", value: 3 },
+        ],
+      };
       const result = merger.deepMergeJson(local, remote);
       expect(result.items).toEqual([
         { name: "a", value: 10 },

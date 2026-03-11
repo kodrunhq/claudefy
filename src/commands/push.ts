@@ -125,9 +125,13 @@ export class PushCommand {
         const filesToEncrypt = new Set(findings.map((f) => f.file));
         for (const filePath of filesToEncrypt) {
           if (existsSync(filePath) && !filePath.endsWith(".age")) {
-            const ad = (filePath.startsWith(configDir)
-              ? relative(configDir, filePath)
-              : relative(unknownDir, filePath)).split(sep).join("/");
+            const ad = (
+              filePath.startsWith(configDir)
+                ? relative(configDir, filePath)
+                : relative(unknownDir, filePath)
+            )
+              .split(sep)
+              .join("/");
             await encryptor.encryptFile(filePath, filePath + ".age", ad);
             await rm(filePath);
           }
@@ -193,9 +197,7 @@ export class PushCommand {
   }
 
   private needsNormalization(itemName: string): boolean {
-    return (
-      ["settings.json", "history.jsonl"].includes(itemName) || itemName.startsWith("plugins/")
-    );
+    return ["settings.json", "history.jsonl"].includes(itemName) || itemName.startsWith("plugins/");
   }
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
@@ -253,7 +255,14 @@ export class PushCommand {
         changedFiles.push(destPath);
       }
     } else if (srcStat.isDirectory()) {
-      await this.syncDirectory(srcPath, destBaseDir, itemName, storeHashes, changedFiles, pathMapper);
+      await this.syncDirectory(
+        srcPath,
+        destBaseDir,
+        itemName,
+        storeHashes,
+        changedFiles,
+        pathMapper,
+      );
     }
   }
 
@@ -302,7 +311,14 @@ export class PushCommand {
         }
         childNames.push(entry.name);
         const childName = `${itemName}/${entry.name}`;
-        await this.syncDirectory(srcPath, destBaseDir, childName, storeHashes, changedFiles, pathMapper);
+        await this.syncDirectory(
+          srcPath,
+          destBaseDir,
+          childName,
+          storeHashes,
+          changedFiles,
+          pathMapper,
+        );
       } else {
         childNames.push(entry.name);
         const childName = `${itemName}/${entry.name}`;

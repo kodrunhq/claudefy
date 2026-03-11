@@ -17,7 +17,12 @@ export class Merger {
   private findArrayKey(arr: any[]): string | null {
     if (arr.length === 0 || typeof arr[0] !== "object" || arr[0] === null) return null;
     for (const candidate of ["name", "id", "key"]) {
-      if (arr.every((item: any) => item !== null && typeof item === "object" && typeof item[candidate] === "string")) {
+      if (
+        arr.every(
+          (item: any) =>
+            item !== null && typeof item === "object" && typeof item[candidate] === "string",
+        )
+      ) {
         return candidate;
       }
     }

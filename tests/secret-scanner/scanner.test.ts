@@ -81,7 +81,9 @@ describe("SecretScanner", () => {
 
   it("detects Slack bot tokens", async () => {
     const file = join(tempDir, "config.json");
-    const token = ["xo" + "xb", "123456789012", "123456789012", "abcdefghijklmnopqrstuvwx"].join("-");
+    const token = ["xo" + "xb", "123456789012", "123456789012", "abcdefghijklmnopqrstuvwx"].join(
+      "-",
+    );
     await writeFile(file, JSON.stringify({ token }));
     const results = await scanner.scanFile(file);
     expect(results.length).toBeGreaterThan(0);
@@ -90,7 +92,13 @@ describe("SecretScanner", () => {
 
   it("detects Slack user tokens", async () => {
     const file = join(tempDir, "config.json");
-    const token = ["xo" + "xp", "123456789012", "123456789012", "123456789012", "abcdefghijklmnopqrstuvwx"].join("-");
+    const token = [
+      "xo" + "xp",
+      "123456789012",
+      "123456789012",
+      "123456789012",
+      "abcdefghijklmnopqrstuvwx",
+    ].join("-");
     await writeFile(file, JSON.stringify({ token }));
     const results = await scanner.scanFile(file);
     expect(results.length).toBeGreaterThan(0);

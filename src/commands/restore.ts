@@ -73,7 +73,9 @@ export class RestoreCommand {
       }
 
       const selected = backups[index];
-      const confirm = await ask(`This will replace ~/.claude with backup "${selected}". Continue? (y/N) `);
+      const confirm = await ask(
+        `This will replace ~/.claude with backup "${selected}". Continue? (y/N) `,
+      );
       if (confirm.toLowerCase() !== "y") {
         output.info("Restore cancelled.");
         return;

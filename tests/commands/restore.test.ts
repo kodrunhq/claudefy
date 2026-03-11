@@ -47,7 +47,7 @@ describe("RestoreCommand", () => {
 
     const allBackups = await backupManager.listBackups();
     expect(allBackups.length).toBe(2);
-    expect(allBackups.some(b => b.includes("pre-restore"))).toBe(true);
+    expect(allBackups.some((b) => b.includes("pre-restore"))).toBe(true);
   });
 
   it("returns empty list when no backups exist", async () => {
