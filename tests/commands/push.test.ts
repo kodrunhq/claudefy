@@ -298,6 +298,48 @@ describe("PushCommand", () => {
     await rm(verifyDir, { recursive: true, force: true });
   });
 
+  it("skips .git directories inside synced folders", async () => {
+    // Simulate a plugin cache with a .git submodule
+    await mkdir(join(claudeDir, "plugins", "cache", "my-plugin", ".git"), { recursive: true });
+    await writeFile(
+      join(claudeDir, "plugins", "cache", "my-plugin", ".git", "index"),
+      Buffer.from([0x44, 0x49, 0x52, 0x43, 0x00, 0x00, 0x00, 0x02]),
+    );
+    await writeFile(
+      join(claudeDir, "plugins", "cache", "my-plugin", "plugin.js"),
+      "module.exports = {}",
+    );
+
+    // Add plugins to allowlist
+    await writeFile(
+      join(claudefyDir, "sync-filter.json"),
+      JSON.stringify({
+        allowlist: ["commands", "agents", "settings.json", "plugins"],
+        denylist: ["cache"],
+      }),
+    );
+
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true });
+
+    const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-verify-"));
+    await simpleGit(verifyDir).clone(remoteDir, "store");
+    const storePath = join(verifyDir, "store");
+
+    // .git directory should NOT be in the store
+    expect(existsSync(join(storePath, "config", "plugins", "cache", "my-plugin", ".git"))).toBe(
+      false,
+    );
+    // Regular plugin files should be synced
+    const content = await readFile(
+      join(storePath, "config", "plugins", "cache", "my-plugin", "plugin.js"),
+      "utf-8",
+    );
+    expect(content).toBe("module.exports = {}");
+
+    await rm(verifyDir, { recursive: true, force: true });
+  });
+
   it("skips unchanged files on second push (incremental)", async () => {
     const push = new PushCommand(homeDir);
     await push.execute({ quiet: true, skipEncryption: true });

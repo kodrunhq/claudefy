@@ -197,7 +197,11 @@ export class PushCommand {
   }
 
   private needsNormalization(itemName: string): boolean {
-    return ["settings.json", "history.jsonl"].includes(itemName) || itemName.startsWith("plugins/");
+    return (
+      ["settings.json", "history.jsonl"].includes(itemName) ||
+      itemName === "plugins/installed_plugins.json" ||
+      itemName === "plugins/known_marketplaces.json"
+    );
   }
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
