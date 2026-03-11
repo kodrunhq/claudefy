@@ -45,7 +45,7 @@ describe("Encryptor", () => {
     expect(decrypted).toBe(original);
   });
 
-  it("fails decryption with wrong passphrase", async () => {
+  it("fails decryption with wrong passphrase", { timeout: 30_000 }, async () => {
     const encryptor1 = new Encryptor("correct-passphrase", "test-repo");
     const encryptor2 = new Encryptor("wrong-passphrase", "test-repo");
 

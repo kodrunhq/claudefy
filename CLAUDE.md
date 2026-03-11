@@ -39,7 +39,7 @@ Claudefy is a CLI tool that syncs `~/.claude` config across machines via a git b
 - **Path normalization:** Absolute paths in settings.json, plugins, and project directory names are converted to canonical form using `@@CLAUDE_DIR@@` and `@@alias@@` sentinels for portability between machines.
 - **Override flow:** `override --confirm` wipes the remote store and pushes local as source of truth. Other machines detect the `.override` marker file on next pull, create a backup, and reset.
 - **Hooks security:** Remote `hooks`, `mcpServers`, `env`, `permissions`, `allowedTools`, and `apiKeyHelper` keys are stripped from settings.json during pull to prevent code injection.
-- **Encryption:** Reactive — only files where the secret scanner detects a match are encrypted. Files without detected secrets are stored in plaintext even when `encryption.enabled` is true. PBKDF2-SHA256 with 600k iterations and per-repo salt derived from the backend URL.
+- **Encryption:** Reactive — only files where the secret scanner detects a match are encrypted. Files without detected secrets are stored in plaintext even when `encryption.enabled` is true. PBKDF2-SHA256 with 600k iterations and per-repo salt derived from the backend URL (normalized to `host/path` form so SSH and HTTPS URLs produce the same key).
 
 ### Store layout (inside `~/.claudefy/store/`)
 

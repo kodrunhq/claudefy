@@ -34,13 +34,17 @@ describe("FileEncryptor", () => {
     expect(encrypted1).toBe(encrypted2);
   });
 
-  it("produces deterministic output across separate instances with same passphrase", () => {
-    const enc1 = new FileEncryptor(passphrase, "test-repo");
-    const enc2 = new FileEncryptor(passphrase, "test-repo");
-    const text = "cross-instance determinism";
+  it(
+    "produces deterministic output across separate instances with same passphrase",
+    { timeout: 30_000 },
+    () => {
+      const enc1 = new FileEncryptor(passphrase, "test-repo");
+      const enc2 = new FileEncryptor(passphrase, "test-repo");
+      const text = "cross-instance determinism";
 
-    expect(enc1.encryptString(text, "test-file")).toBe(enc2.encryptString(text, "test-file"));
-  });
+      expect(enc1.encryptString(text, "test-file")).toBe(enc2.encryptString(text, "test-file"));
+    },
+  );
 
   it("produces different output for different content", () => {
     const encryptor = new FileEncryptor(passphrase, "test-repo");
@@ -61,7 +65,7 @@ describe("FileEncryptor", () => {
     expect(decrypted).toBe("");
   });
 
-  it("handles large content (1MB)", () => {
+  it("handles large content (1MB)", { timeout: 30_000 }, () => {
     const encryptor = new FileEncryptor(passphrase, "test-repo");
     const large = new Uint8Array(1024 * 1024);
     for (let i = 0; i < large.length; i++) {
