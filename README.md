@@ -98,7 +98,7 @@ Git pull  →  Decrypt  →  PathMapper  →  Merger  →  SecurityFilter  →  
 |---|-------|-------|
 | **Synced** | commands, agents, skills, hooks, rules, plans, plugins, agent-memory, projects, settings.json, history.jsonl, package.json | Core config that travels with you |
 | **Never synced** | cache, backups, file-history, shell-snapshots, paste-cache, session-env, tasks, .credentials.json | Machine-local or sensitive |
-| **Unknown** | Anything else | Synced to separate dir, encrypted by default |
+| **Unknown** | Anything else | Synced to separate dir, always encrypted when encryption is enabled |
 
 ## Commands
 
@@ -138,7 +138,7 @@ Git pull  →  Decrypt  →  PathMapper  →  Merger  →  SecurityFilter  →  
 |--------|-------------|
 | `-q, --quiet` | Suppress output |
 | `--skip-encryption` | Skip encryption (testing only) |
-| `--passphrase <phrase>` | Encryption passphrase (prefer env var) |
+| `--skip-secret-scan` | Skip secret scanning on push |
 
 ## Encryption
 
@@ -186,7 +186,7 @@ Config lives at `~/.claudefy/config.json`:
 {
   "version": 1,
   "backend": { "type": "git", "url": "git@github.com:you/claude-sync.git" },
-  "encryption": { "enabled": true, "useKeychain": false },
+  "encryption": { "enabled": true, "useKeychain": false, "cacheDuration": "0" },
   "machineId": "hostname-abc12345"
 }
 ```

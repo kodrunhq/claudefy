@@ -82,4 +82,20 @@ describe("SyncFilter", () => {
     const names = result.allowlist.map((i) => i.name);
     expect(names).toContain("get-shit-done");
   });
+
+  it("denies .credentials.json even if user adds it to allowlist", async () => {
+    await writeFile(join(claudeDir, ".credentials.json"), '{"api_key": "secret"}');
+
+    const customFilter = {
+      allowlist: [...DEFAULT_SYNC_FILTER.allowlist, ".credentials.json"],
+      denylist: DEFAULT_SYNC_FILTER.denylist.filter((d) => d !== ".credentials.json"),
+    };
+    const filter = new SyncFilter(customFilter);
+    const result = await filter.classify(claudeDir);
+
+    const allowNames = result.allowlist.map((i) => i.name);
+    const denyNames = result.denylist.map((i) => i.name);
+    expect(allowNames).not.toContain(".credentials.json");
+    expect(denyNames).toContain(".credentials.json");
+  });
 });

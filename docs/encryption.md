@@ -2,7 +2,7 @@
 
 ## Overview
 
-claudefy encrypts sensitive files using **AES-256-SIV** deterministic authenticated encryption from `@noble/ciphers`. Encryption is **reactive** — only files where the secret scanner detects a match are encrypted; clean files remain in plaintext for easy inspection and diffing.
+claudefy encrypts files using **AES-256-SIV** deterministic authenticated encryption from `@noble/ciphers`. Allowlisted files are encrypted reactively (only when the secret scanner detects a match), while unknown-tier files are always encrypted when encryption is enabled.
 
 ## Why Deterministic Encryption?
 
@@ -95,19 +95,21 @@ Approximately **38%** from base64 encoding of the ciphertext.
 
 ## Passphrase Resolution
 
-claudefy resolves the passphrase in this order (first match wins):
+For `push` and `pull`, claudefy resolves the passphrase in this order (first match wins):
 
-1. **`CLAUDEFY_PASSPHRASE` environment variable** — recommended for CI or scripted use.
+1. **`CLAUDEFY_PASSPHRASE` environment variable** — recommended for CI, scripted use, and auto-sync hooks.
 2. **OS keychain** — if `encryption.useKeychain` is `true` in config. Uses `@napi-rs/keyring`.
-3. **Interactive prompt** — asks on the terminal (only if TTY is available).
-4. **`--passphrase` CLI flag** — works but warns about process list exposure (visible in `ps`).
+
+If neither source provides a passphrase, the command fails with an error.
+
+Interactive prompts for the passphrase only occur during `claudefy init` and `claudefy join`, when you first set or confirm the passphrase and choose whether to store it in the OS keychain.
 
 ## What Gets Encrypted
 
 | Scenario | Encrypted? |
 |----------|-----------|
 | File with detected secrets (API keys, tokens, etc.) | Yes |
-| File in the "unknown" tier | Always encrypted |
+| File in the "unknown" tier (encryption enabled) | Always encrypted |
 | File in the "allow" tier, no secrets detected | No (plaintext) |
 | File in the "deny" tier | Not synced at all |
 | Push with secrets detected and encryption disabled | **Push is blocked** (error) |

@@ -118,4 +118,4 @@ Since hooks run non-interactively, you need the passphrase available without a p
 1. **Environment variable** (recommended): Set `CLAUDEFY_PASSPHRASE` in your shell profile.
 2. **OS keychain**: Enable with `claudefy config set encryption.useKeychain true` and store the passphrase during `init` or `join`.
 
-If neither is available and encryption is enabled, the hook will fail silently (due to `--quiet`). Run `claudefy pull` manually to see the error.
+If neither is available and encryption is enabled, the hook will fail. The `--quiet` flag suppresses normal output, but errors are still printed to stderr. Run `claudefy pull` manually to see the full error details.

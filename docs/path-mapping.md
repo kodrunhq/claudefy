@@ -15,25 +15,34 @@ These absolute paths break when syncing between machines with different home dir
 
 claudefy uses **bidirectional path normalization** with sentinel tokens:
 
-| Sentinel | Meaning | Example |
-|----------|---------|---------|
-| `@@CLAUDE_DIR@@` | The `~/.claude/` directory | `/home/alice/.claude/` → `@@CLAUDE_DIR@@` |
-| `@@alias@@` | A project link | `/home/alice/myapp` → `@@myapp@@` |
+| Sentinel | Meaning | Used In | Example |
+|----------|---------|---------|---------|
+| `@@CLAUDE_DIR@@` | The `~/.claude/` directory | settings.json, plugins/*.json | `/home/alice/.claude/` → `@@CLAUDE_DIR@@` |
+| `@@alias@@` | A project link | settings.json, history.jsonl | `/home/alice/myapp` → `@@myapp@@` |
+
+The `@@CLAUDE_DIR@@` sentinel replaces the absolute `~/.claude/` path prefix in all string values (recursively). The `@@alias@@` sentinel replaces project-specific paths that match a registered link — this works in both `settings.json` (via recursive value replacement) and `history.jsonl` (via the `project` and `cwd` fields).
 
 ### Push (Normalize)
 
 Local absolute paths are replaced with sentinels before committing to the store:
 
 ```json
-// Before normalization (local)
+// Before normalization (local settings.json)
 {
   "projectDir": "/home/alice/.claude/projects/-home-alice-myapp"
 }
 
-// After normalization (in store)
+// After normalization (in store) — @@CLAUDE_DIR@@ replaces the ~/.claude/ prefix
 {
-  "projectDir": "@@CLAUDE_DIR@@projects/@@myapp@@"
+  "projectDir": "@@CLAUDE_DIR@@/projects/-home-alice-myapp"
 }
+```
+
+For history.jsonl, project paths matching a link are replaced with alias sentinels:
+
+```json
+// Before: {"project": "/home/alice/myapp", "cwd": "/home/alice/myapp/src"}
+// After:  {"project": "@@myapp@@", "cwd": "@@myapp@@/src"}
 ```
 
 ### Pull (Remap)
@@ -43,12 +52,12 @@ Sentinels are replaced with the local machine's actual paths:
 ```json
 // In store
 {
-  "projectDir": "@@CLAUDE_DIR@@projects/@@myapp@@"
+  "projectDir": "@@CLAUDE_DIR@@/projects/-home-alice-myapp"
 }
 
 // After remapping on Machine B
 {
-  "projectDir": "/Users/bob/.claude/projects/-Users-bob-workspace-myapp"
+  "projectDir": "/Users/bob/.claude/projects/-home-alice-myapp"
 }
 ```
 
@@ -64,15 +73,16 @@ This creates a mapping in `~/.claudefy/links.json`:
 
 ```json
 {
-  "links": [
-    {
-      "alias": "myapp",
-      "localPath": "/home/alice/projects/myapp",
-      "canonicalId": "github.com--alice--myapp"
-    }
-  ]
+  "myapp": {
+    "localPath": "/home/alice/projects/myapp",
+    "canonicalId": "github.com--alice--myapp",
+    "gitRemote": "git@github.com:alice/myapp.git",
+    "detectedAt": "2025-03-11T10:30:00.000Z"
+  }
 }
 ```
+
+The file is keyed by alias. `gitRemote` is auto-detected from the project's git remote (or `null` if not a git repo). `detectedAt` records when the link was created.
 
 The `canonicalId` is auto-detected from the git remote (via GitIdentity), so you can use any alias you want — the identity is based on the repository URL.
 

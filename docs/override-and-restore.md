@@ -93,4 +93,4 @@ Done.
 
 ### Path Traversal Protection
 
-Backup names are validated to prevent `../` traversal attacks. Only backups created by claudefy (matching the expected naming format) can be restored.
+Backup paths are validated to prevent `../` traversal attacks by ensuring the resolved path stays within `~/.claudefy/backups/`. Any backup name that would escape this directory is rejected.

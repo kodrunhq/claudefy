@@ -12,7 +12,7 @@ claudefy syncs configuration through a remote git repository. The security model
 
 ### 1. Credential Isolation
 
-`.credentials.json` is in the **hardcoded deny list** and is never synced under any circumstances. This cannot be overridden by configuration.
+`.credentials.json` is in a **hardcoded deny list** enforced in code and is never synced under any circumstances. Even if a user modifies `~/.claudefy/sync-filter.json` to add it to the allowlist, the hardcoded check takes precedence.
 
 ### 2. Hook Stripping (Anti-Injection)
 
@@ -29,7 +29,7 @@ This means a compromised machine pushing malicious hooks will have those hooks s
 
 ### 3. Secret Scanner
 
-Before push, files are scanned for 14 secret patterns:
+Before each push, changed files are scanned for 14 secret patterns (only files that differ from the store are checked, not the entire store):
 
 | Pattern | Example |
 |---------|---------|
@@ -55,10 +55,10 @@ Before push, files are scanned for 14 secret patterns:
 
 ### 4. Reactive Encryption
 
-Only files with detected secrets are encrypted. This is intentional:
+Encryption is applied in two ways:
 
-- Clean files remain in plaintext for easy inspection and git diffing.
-- Unknown-tier files are always encrypted regardless of scanner results.
+- **Allowlisted files** with detected secrets are encrypted before push. Clean allowlisted files remain in plaintext for easy inspection and git diffing.
+- **Unknown-tier files** are always encrypted when encryption is enabled, regardless of scanner results.
 - The scanner is not exhaustive — it catches common patterns. For sensitive repos, keep encryption enabled as a safety net.
 
 ### 5. Symlink Validation
@@ -73,7 +73,6 @@ During pull, symlinks are validated:
 
 - Passphrases are **never stored in plaintext** on disk.
 - OS keychain integration uses `@napi-rs/keyring` for secure storage.
-- The `--passphrase` CLI flag **warns** about process list exposure (`ps aux` shows CLI arguments).
 - Recommended: use `CLAUDEFY_PASSPHRASE` environment variable.
 
 ### 7. Config Injection Prevention
@@ -92,7 +91,7 @@ Backups are stored in `~/.claudefy/backups/` with timestamps and labels.
 ## Recommendations
 
 1. **Keep encryption enabled.** The secret scanner is a safety net, not a guarantee.
-2. **Use `CLAUDEFY_PASSPHRASE` env var** rather than `--passphrase` CLI flag.
+2. **Use `CLAUDEFY_PASSPHRASE` env var** for non-interactive passphrase resolution.
 3. **Use a strong passphrase.** PBKDF2 with 600k iterations provides good protection, but a weak passphrase is still a weak passphrase.
 4. **Use a private repository.** Even with encryption, metadata (file names, directory structure, timestamps) is visible.
 5. **Review unknown-tier files** periodically via `claudefy status` to ensure nothing unexpected is being synced.

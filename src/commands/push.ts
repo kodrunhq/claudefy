@@ -105,6 +105,8 @@ export class PushCommand {
     await this.removeDeleted(unknownDir, syncedUnknownItems);
 
     // 7. Scan for secrets and encrypt files that contain them
+    const filesToEncrypt = new Set<string>();
+
     if (!options.skipSecretScan && changedFiles.length > 0) {
       const scanner = new SecretScanner();
       const findings = await scanner.scanFiles(changedFiles);
@@ -116,31 +118,43 @@ export class PushCommand {
             `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nEnable encryption or use --skip-secret-scan to bypass scanning.`,
           );
         }
-        if (!options.passphrase) {
-          throw new Error(
-            "Secrets detected and encryption is enabled but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
-          );
-        }
 
-        const encryptor = new Encryptor(options.passphrase, config.backend.url);
-        const filesToEncrypt = new Set(findings.map((f) => f.file));
-        for (const filePath of filesToEncrypt) {
-          if (existsSync(filePath) && !filePath.endsWith(".age")) {
-            const ad = (
-              filePath.startsWith(configDir)
-                ? relative(configDir, filePath)
-                : relative(unknownDir, filePath)
-            )
-              .split(sep)
-              .join("/");
-            await encryptor.encryptFile(filePath, filePath + ".age", ad);
-            await rm(filePath);
-          }
+        for (const f of findings) {
+          filesToEncrypt.add(f.file);
         }
+      }
+    }
 
-        if (!options.quiet) {
-          output.info(`Encrypted ${filesToEncrypt.size} file(s) containing potential secrets.`);
+    // 7b. Always encrypt unknown-tier files when encryption is enabled
+    if (config.encryption.enabled && !options.skipEncryption) {
+      await this.collectFilesRecursive(unknownDir, filesToEncrypt);
+    }
+
+    // 7c. Perform encryption on all files that need it
+    if (filesToEncrypt.size > 0) {
+      if (!options.passphrase) {
+        throw new Error(
+          "Encryption is required but no passphrase found. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+        );
+      }
+
+      const encryptor = new Encryptor(options.passphrase, config.backend.url);
+      for (const filePath of filesToEncrypt) {
+        if (existsSync(filePath) && !filePath.endsWith(".age")) {
+          const ad = (
+            filePath.startsWith(configDir)
+              ? relative(configDir, filePath)
+              : relative(unknownDir, filePath)
+          )
+            .split(sep)
+            .join("/");
+          await encryptor.encryptFile(filePath, filePath + ".age", ad);
+          await rm(filePath);
         }
+      }
+
+      if (!options.quiet) {
+        output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
       }
     }
 
@@ -366,6 +380,19 @@ export class PushCommand {
         if (!childSet.has(baseName) && !childSet.has(storeEntry)) {
           await rm(join(destDir, storeEntry), { recursive: true });
         }
+      }
+    }
+  }
+
+  private async collectFilesRecursive(dirPath: string, files: Set<string>): Promise<void> {
+    if (!existsSync(dirPath)) return;
+    const entries = await readdir(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await this.collectFilesRecursive(fullPath, files);
+      } else if (!entry.isSymbolicLink() && !entry.name.endsWith(".age")) {
+        files.add(fullPath);
       }
     }
   }
