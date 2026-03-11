@@ -71,6 +71,75 @@ describe("SecretScanner", () => {
     expect(results[0].pattern).toBe("Anthropic API Key");
   });
 
+  it("detects Google API keys", async () => {
+    const file = join(tempDir, "config.json");
+    await writeFile(file, JSON.stringify({ key: "AIzaSyA1234567890abcdefghijklmnopqrstuv" }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].pattern).toBe("Google API Key");
+  });
+
+  it("detects Slack bot tokens", async () => {
+    const file = join(tempDir, "config.json");
+    const token = ["xo" + "xb", "123456789012", "123456789012", "abcdefghijklmnopqrstuvwx"].join("-");
+    await writeFile(file, JSON.stringify({ token }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some((r) => r.pattern === "Slack Bot Token")).toBe(true);
+  });
+
+  it("detects Slack user tokens", async () => {
+    const file = join(tempDir, "config.json");
+    const token = ["xo" + "xp", "123456789012", "123456789012", "123456789012", "abcdefghijklmnopqrstuvwx"].join("-");
+    await writeFile(file, JSON.stringify({ token }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.some((r) => r.pattern === "Slack User Token")).toBe(true);
+  });
+
+  it("detects Stripe live keys", async () => {
+    const file = join(tempDir, "config.json");
+    const key = "s" + "k_live_" + "abcdefghijklmnopqrstuvwx";
+    await writeFile(file, JSON.stringify({ key }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].pattern).toBe("Stripe Live Key");
+  });
+
+  it("detects Stripe test keys", async () => {
+    const file = join(tempDir, "config.json");
+    const key = "s" + "k_test_" + "abcdefghijklmnopqrstuvwx";
+    await writeFile(file, JSON.stringify({ key }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].pattern).toBe("Stripe Test Key");
+  });
+
+  it("detects Azure connection strings", async () => {
+    const file = join(tempDir, "config.json");
+    await writeFile(file, `AccountKey=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGH==`);
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].pattern).toBe("Azure Connection String");
+  });
+
+  it("detects Twilio API keys", async () => {
+    const file = join(tempDir, "config.json");
+    const key = "S" + "K" + "0123456789abcdef".repeat(2);
+    await writeFile(file, JSON.stringify({ key }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].pattern).toBe("Twilio API Key");
+  });
+
+  it("detects Datadog API keys", async () => {
+    const file = join(tempDir, "config.json");
+    await writeFile(file, JSON.stringify({ key: "dd_abcdefghijklmnopqrstuvwxyz012345" }));
+    const results = await scanner.scanFile(file);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].pattern).toBe("Datadog API Key");
+  });
+
   it("scans multiple files", async () => {
     const clean = join(tempDir, "clean.md");
     const dirty = join(tempDir, "dirty.json");
