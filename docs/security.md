@@ -29,7 +29,7 @@ This means a compromised machine pushing malicious hooks will have those hooks s
 
 ### 3. Secret Scanner
 
-Before each push, changed files are scanned for 14 secret patterns (only files that differ from the store are checked, not the entire store):
+Before each push, changed files are scanned for 15 secret patterns (only files that differ from the store are checked, not the entire store):
 
 | Pattern | Example |
 |---------|---------|

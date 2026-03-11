@@ -56,7 +56,7 @@ src/
   │   └─ SHA256 comparison — only write changed files
   │
   ├─ SecretScanner.scanFiles()
-  │   └─ 14 regex patterns for API keys, tokens, credentials
+  │   └─ 15 regex patterns for API keys, tokens, credentials
   │
   ├─ Encryptor (reactive — only files with detected secrets)
   │   ├─ JSONL → LineEncryptor (line-by-line AES-SIV)

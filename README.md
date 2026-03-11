@@ -161,7 +161,7 @@ claudefy uses **AES-256-SIV** deterministic encryption via `@noble/ciphers`.
 
 - `.credentials.json` is **never** synced (hardcoded deny).
 - Remote `hooks`, `mcpServers`, `env`, `permissions`, `allowedTools`, and `apiKeyHelper` keys are **stripped** from settings.json on pull — prevents code injection from the remote.
-- Secret scanner checks 14 patterns (API keys, tokens, credentials) before push. Secrets trigger encryption; if encryption is disabled, the push is blocked.
+- Secret scanner checks 15 patterns (API keys, tokens, credentials) before push. Secrets trigger encryption; if encryption is disabled, the push is blocked.
 - Symlinks are validated against path traversal.
 - Passphrases are never stored in plaintext on disk.
 
