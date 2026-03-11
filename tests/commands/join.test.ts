@@ -106,17 +106,6 @@ describe("JoinCommand", () => {
   });
 
   it("decrypts files when passphrase is provided via options", async () => {
-    // Re-initialize Machine A with encryption enabled
-    await rm(join(initHomeDir, ".claudefy"), { recursive: true, force: true });
-
-    // Create a file with a secret to trigger encryption
-    const claudeDir = join(initHomeDir, ".claude");
-    await mkdir(join(claudeDir, "projects"), { recursive: true });
-    await writeFile(
-      join(claudeDir, "projects", "session.jsonl"),
-      '{"prompt":"test","apiKey":"sk-ant-api03-secret123"}\n',
-    );
-
     const encInitHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc-init-"));
     extraDirs.push(encInitHome);
     const encClaudeDir = join(encInitHome, ".claude");
