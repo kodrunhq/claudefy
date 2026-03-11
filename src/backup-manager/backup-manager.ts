@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, relative } from "node:path";
 
 export class BackupManager {
   private backupsDir: string;
@@ -21,7 +21,12 @@ export class BackupManager {
   }
 
   getBackupPath(name: string): string {
-    return join(this.backupsDir, name);
+    const resolved = resolve(this.backupsDir, name);
+    const rel = relative(this.backupsDir, resolved);
+    if (rel.startsWith("..") || resolve(resolved) !== resolved) {
+      throw new Error(`Invalid backup name: "${name}"`);
+    }
+    return resolved;
   }
 
   async listBackups(): Promise<string[]> {

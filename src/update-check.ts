@@ -66,8 +66,13 @@ export async function checkForUpdates(currentVersion: string, claudefyDir: strin
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(REGISTRY_URL, { signal: controller.signal });
-    clearTimeout(timeout);
+    timeout.unref();
+    let res: Response;
+    try {
+      res = await fetch(REGISTRY_URL, { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!res.ok) return;
     const data = (await res.json()) as { version?: string };
