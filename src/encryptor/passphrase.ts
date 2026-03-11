@@ -98,6 +98,35 @@ export interface PassphraseSetupResult {
   storedInKeychain: boolean;
 }
 
+async function offerKeychainStorage(passphrase: string): Promise<boolean> {
+  if (isKeychainAvailable()) {
+    const storeIt = await promptYesNo("Store passphrase in OS keychain?");
+    if (storeIt) {
+      return storePassphraseInKeychain(passphrase);
+    }
+  }
+  return false;
+}
+
+function printKeychainHint(storedInKeychain: boolean): void {
+  if (!storedInKeychain) {
+    console.log(
+      "Set CLAUDEFY_PASSPHRASE environment variable in your shell profile to avoid re-entering.",
+    );
+  }
+}
+
+export async function promptExistingPassphrase(): Promise<PassphraseSetupResult | null> {
+  const passphrase = await prompt("Enter encryption passphrase: ", true);
+  if (!passphrase.trim()) {
+    return null;
+  }
+
+  const storedInKeychain = await offerKeychainStorage(passphrase);
+  printKeychainHint(storedInKeychain);
+  return { passphrase, storedInKeychain };
+}
+
 export async function promptPassphraseSetup(): Promise<PassphraseSetupResult | null> {
   const wantsEncryption = await promptYesNo("Enable encryption for synced data?");
   if (!wantsEncryption) {
@@ -122,19 +151,7 @@ export async function promptPassphraseSetup(): Promise<PassphraseSetupResult | n
     break;
   }
 
-  let storedInKeychain = false;
-  if (isKeychainAvailable()) {
-    const storeIt = await promptYesNo("Store passphrase in OS keychain?");
-    if (storeIt) {
-      storedInKeychain = storePassphraseInKeychain(passphrase);
-    }
-  }
-
-  if (!storedInKeychain) {
-    console.log(
-      "Set CLAUDEFY_PASSPHRASE environment variable in your shell profile to avoid re-entering.",
-    );
-  }
-
+  const storedInKeychain = await offerKeychainStorage(passphrase);
+  printKeychainHint(storedInKeychain);
   return { passphrase, storedInKeychain };
 }

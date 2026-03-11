@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { JoinCommand } from "../../src/commands/join.js";
 import { InitCommand } from "../../src/commands/init.js";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
@@ -103,5 +103,154 @@ describe("JoinCommand", () => {
     expect(settings.hooks).toBeDefined();
     expect(settings.hooks.SessionStart).toBeDefined();
     expect(settings.hooks.SessionEnd).toBeDefined();
+  });
+
+  it("decrypts files when passphrase is provided via options", async () => {
+    const encInitHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc-init-"));
+    extraDirs.push(encInitHome);
+    const encClaudeDir = join(encInitHome, ".claude");
+    await mkdir(join(encClaudeDir, "projects"), { recursive: true });
+    await writeFile(
+      join(encClaudeDir, "projects", "session.jsonl"),
+      '{"prompt":"test","apiKey":"sk-ant-api03-secret123"}\n',
+    );
+    await writeFile(join(encClaudeDir, "settings.json"), '{"theme":"dark"}');
+
+    const encRemote = await mkdtemp(join(tmpdir(), "claudefy-join-enc-remote-"));
+    extraDirs.push(encRemote);
+    await simpleGit(encRemote).init(true, ["-b", "main"]);
+
+    const initCmd = new InitCommand(encInitHome);
+    await initCmd.execute({
+      backend: encRemote,
+      quiet: true,
+      passphrase: "test-join-pass",
+    });
+
+    // Verify the remote has .age files
+    const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-join-enc-verify-"));
+    extraDirs.push(verifyDir);
+    await simpleGit(verifyDir).clone(encRemote, "store");
+    expect(existsSync(join(verifyDir, "store", "config", "projects", "session.jsonl.age"))).toBe(
+      true,
+    );
+
+    // Machine B joins with the passphrase provided directly
+    const encJoinHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc-join-"));
+    extraDirs.push(encJoinHome);
+    const encJoinClaudeDir = join(encJoinHome, ".claude");
+    await mkdir(encJoinClaudeDir, { recursive: true });
+    await writeFile(join(encJoinClaudeDir, "settings.json"), "{}");
+
+    const joinCmd = new JoinCommand(encJoinHome);
+    await joinCmd.execute({
+      backend: encRemote,
+      quiet: true,
+      passphrase: "test-join-pass",
+    });
+
+    // The decrypted content should be present locally
+    const sessionPath = join(encJoinHome, ".claude", "projects", "session.jsonl");
+    expect(existsSync(sessionPath)).toBe(true);
+    const content = await readFile(sessionPath, "utf-8");
+    expect(content).toContain("sk-ant-api03-secret123");
+  });
+
+  it("fails when store has encrypted files and no passphrase is available (non-TTY)", async () => {
+    // Initialize with encryption
+    const encInitHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc2-init-"));
+    extraDirs.push(encInitHome);
+    const encClaudeDir = join(encInitHome, ".claude");
+    await mkdir(join(encClaudeDir, "projects"), { recursive: true });
+    await writeFile(
+      join(encClaudeDir, "projects", "session.jsonl"),
+      '{"apiKey":"sk-ant-api03-secret"}\n',
+    );
+    await writeFile(join(encClaudeDir, "settings.json"), "{}");
+
+    const encRemote = await mkdtemp(join(tmpdir(), "claudefy-join-enc2-remote-"));
+    extraDirs.push(encRemote);
+    await simpleGit(encRemote).init(true, ["-b", "main"]);
+
+    const initCmd = new InitCommand(encInitHome);
+    await initCmd.execute({
+      backend: encRemote,
+      quiet: true,
+      passphrase: "test-pass",
+    });
+
+    // Join without passphrase on non-TTY (process.stdin.isTTY is undefined in tests)
+    const encJoinHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc2-join-"));
+    extraDirs.push(encJoinHome);
+    await mkdir(join(encJoinHome, ".claude"), { recursive: true });
+    await writeFile(join(encJoinHome, ".claude", "settings.json"), "{}");
+
+    const joinCmd = new JoinCommand(encJoinHome);
+    await expect(
+      joinCmd.execute({
+        backend: encRemote,
+        quiet: true,
+        // no passphrase, no TTY -> should fail in pull
+      }),
+    ).rejects.toThrow(/Encrypted files found but no passphrase/);
+  });
+
+  it("prompts for passphrase when store has .age files and stdin is TTY", async () => {
+    // Initialize with encryption
+    const encInitHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc3-init-"));
+    extraDirs.push(encInitHome);
+    const encClaudeDir = join(encInitHome, ".claude");
+    await mkdir(join(encClaudeDir, "projects"), { recursive: true });
+    await writeFile(
+      join(encClaudeDir, "projects", "session.jsonl"),
+      '{"apiKey":"sk-ant-api03-secret"}\n',
+    );
+    await writeFile(join(encClaudeDir, "settings.json"), "{}");
+
+    const encRemote = await mkdtemp(join(tmpdir(), "claudefy-join-enc3-remote-"));
+    extraDirs.push(encRemote);
+    await simpleGit(encRemote).init(true, ["-b", "main"]);
+
+    const initCmd = new InitCommand(encInitHome);
+    await initCmd.execute({
+      backend: encRemote,
+      quiet: true,
+      passphrase: "test-pass",
+    });
+
+    // Mock promptExistingPassphrase to return the passphrase
+    const passphraseMod = await import("../../src/encryptor/passphrase.js");
+    const promptSpy = vi
+      .spyOn(passphraseMod, "promptExistingPassphrase")
+      .mockResolvedValue({ passphrase: "test-pass", storedInKeychain: false });
+
+    // Mock process.stdin.isTTY
+    const origIsTTY = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: true, writable: true });
+
+    try {
+      const encJoinHome = await mkdtemp(join(tmpdir(), "claudefy-join-enc3-join-"));
+      extraDirs.push(encJoinHome);
+      await mkdir(join(encJoinHome, ".claude"), { recursive: true });
+      await writeFile(join(encJoinHome, ".claude", "settings.json"), "{}");
+
+      const joinCmd = new JoinCommand(encJoinHome);
+      await joinCmd.execute({
+        backend: encRemote,
+        quiet: true,
+        // no passphrase — should trigger prompt
+      });
+
+      expect(promptSpy).toHaveBeenCalledOnce();
+
+      // Decrypted content should be present
+      const sessionPath = join(encJoinHome, ".claude", "projects", "session.jsonl");
+      expect(existsSync(sessionPath)).toBe(true);
+      const content = await readFile(sessionPath, "utf-8");
+      expect(content).toContain("sk-ant-api03-secret");
+    } finally {
+      promptSpy.mockRestore();
+      Object.defineProperty(process.stdin, "isTTY", { value: origIsTTY, writable: true });
+    }
   });
 });
