@@ -1,6 +1,5 @@
 import { join } from "node:path";
-import { readdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { lstat, readdir } from "node:fs/promises";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PullCommand } from "./pull.js";
@@ -101,16 +100,26 @@ export class JoinCommand {
     const configDir = join(storePath, "config");
     const unknownDir = join(storePath, "unknown");
     for (const dir of [configDir, unknownDir]) {
-      if (existsSync(dir) && (await this.hasAgeFilesRecursive(dir))) {
-        return true;
+      try {
+        const stats = await lstat(dir);
+        if (!stats.isDirectory() || stats.isSymbolicLink()) continue;
+        if (await this.hasAgeFilesRecursive(dir)) return true;
+      } catch {
+        // Directory doesn't exist, skip
       }
     }
     return false;
   }
 
   private async hasAgeFilesRecursive(dirPath: string): Promise<boolean> {
-    const entries = await readdir(dirPath, { withFileTypes: true });
+    let entries;
+    try {
+      entries = await readdir(dirPath, { withFileTypes: true });
+    } catch {
+      return false;
+    }
     for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
         if (await this.hasAgeFilesRecursive(join(dirPath, entry.name))) return true;
       } else if (entry.name.endsWith(".age")) {
