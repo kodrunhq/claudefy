@@ -1,5 +1,5 @@
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { LineEncryptor } from "./line-encryptor.js";
 import { FileEncryptor } from "./file-encryptor.js";
 
@@ -63,7 +63,7 @@ export class Encryptor {
       if (entry.isDirectory()) {
         await this._encryptDirRecursive(fullPath, rootPath);
       } else if (!entry.name.endsWith(".age")) {
-        const ad = relative(rootPath, fullPath);
+        const ad = relative(rootPath, fullPath).split(sep).join("/");
         await this.encryptFile(fullPath, fullPath + ".age", ad);
         await rm(fullPath);
       }
@@ -83,7 +83,7 @@ export class Encryptor {
         await this._decryptDirRecursive(fullPath, rootPath);
       } else if (entry.name.endsWith(".age")) {
         const outputPath = fullPath.replace(/\.age$/, "");
-        const ad = relative(rootPath, outputPath);
+        const ad = relative(rootPath, outputPath).split(sep).join("/");
         await this.decryptFile(fullPath, outputPath, ad);
         await rm(fullPath);
       }

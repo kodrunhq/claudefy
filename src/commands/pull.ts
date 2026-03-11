@@ -87,7 +87,7 @@ export class PullCommand {
 
     // 3. Create temp working directory
     const tmpDir = join(claudefyDir, ".pull-tmp");
-    if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true });
+    if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
     await mkdir(tmpDir, { recursive: true });
 
     const cleanup = () => {
@@ -266,7 +266,7 @@ export class PullCommand {
         }
       }
     } finally {
-      if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true });
+      if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
       process.removeListener("SIGINT", cleanup);
       process.removeListener("SIGTERM", cleanup);
     }

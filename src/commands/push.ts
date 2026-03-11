@@ -1,6 +1,6 @@
-import { mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join, relative, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
 import { ConfigManager } from "../config/config-manager.js";
@@ -125,9 +125,9 @@ export class PushCommand {
         const filesToEncrypt = new Set(findings.map((f) => f.file));
         for (const filePath of filesToEncrypt) {
           if (existsSync(filePath) && !filePath.endsWith(".age")) {
-            const ad = filePath.startsWith(configDir)
+            const ad = (filePath.startsWith(configDir)
               ? relative(configDir, filePath)
-              : relative(unknownDir, filePath);
+              : relative(unknownDir, filePath)).split(sep).join("/");
             await encryptor.encryptFile(filePath, filePath + ".age", ad);
             await rm(filePath);
           }
@@ -232,7 +232,8 @@ export class PushCommand {
     changedFiles: string[],
     pathMapper: PathMapper | null,
   ): Promise<void> {
-    const srcStat = await stat(srcPath);
+    const srcStat = await lstat(srcPath);
+    if (srcStat.isSymbolicLink()) return;
 
     if (srcStat.isFile()) {
       let content: Buffer;

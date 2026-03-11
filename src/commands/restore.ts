@@ -38,7 +38,7 @@ export class RestoreCommand {
     }
 
     if (existsSync(this.claudeDir)) {
-      await rm(this.claudeDir, { recursive: true });
+      await rm(this.claudeDir, { recursive: true, force: true });
     }
     await cp(backupPath, this.claudeDir, { recursive: true });
 
