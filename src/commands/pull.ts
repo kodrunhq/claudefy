@@ -10,6 +10,7 @@ import { Encryptor } from "../encryptor/encryptor.js";
 import { Merger } from "../merger/merger.js";
 import { BackupManager } from "../backup-manager/backup-manager.js";
 import { output } from "../output.js";
+import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR } from "../config/defaults.js";
 
 export interface PullOptions {
   quiet: boolean;
@@ -98,18 +99,23 @@ export class PullCommand {
       }
       process.exit(1);
     };
-    process.on("SIGINT", cleanup);
-    process.on("SIGTERM", cleanup);
+    process.once("SIGINT", cleanup);
+    process.once("SIGTERM", cleanup);
 
     try {
       // 4. Copy store to temp dir
-      const storeConfigDir = join(storePath, "config");
-      const storeUnknownDir = join(storePath, "unknown");
+      const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
+      const storeUnknownDir = join(storePath, STORE_UNKNOWN_DIR);
       const tmpConfigDir = join(tmpDir, "config");
       const tmpUnknownDir = join(tmpDir, "unknown");
       if (existsSync(storeConfigDir)) await cp(storeConfigDir, tmpConfigDir, { recursive: true });
       if (existsSync(storeUnknownDir))
         await cp(storeUnknownDir, tmpUnknownDir, { recursive: true });
+
+      // Security: remove any symlinks nested inside subdirectories
+      // (top-level symlinks are checked later, but cp() follows nested ones)
+      await this.removeNestedSymlinks(tmpConfigDir);
+      await this.removeNestedSymlinks(tmpUnknownDir);
 
       // 5. Decrypt any .age files in temp dir
       const encryptedFiles = await this.collectAgeFiles(tmpConfigDir, tmpUnknownDir);
@@ -119,7 +125,7 @@ export class PullCommand {
             "Encrypted files found but no passphrase available. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
           );
         }
-        const encryptor = new Encryptor(options.passphrase);
+        const encryptor = new Encryptor(options.passphrase, config.backend.url);
         if (existsSync(tmpConfigDir)) {
           await encryptor.decryptDirectory(tmpConfigDir);
         }
@@ -135,7 +141,14 @@ export class PullCommand {
       // settings.json
       const remoteSettingsPath = join(tmpConfigDir, "settings.json");
       if (existsSync(remoteSettingsPath)) {
-        const settings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
+        let settings: Record<string, unknown>;
+        try {
+          settings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
+        } catch (err) {
+          throw new Error(`Failed to parse settings.json: ${(err as Error).message}`, {
+            cause: err,
+          });
+        }
         const remapped = pathMapper.remapSettingsPaths(settings, this.claudeDir);
         await writeFile(remoteSettingsPath, JSON.stringify(remapped, null, 2));
       }
@@ -143,7 +156,15 @@ export class PullCommand {
       // installed_plugins.json
       const pluginsJsonPath = join(tmpConfigDir, "plugins", "installed_plugins.json");
       if (existsSync(pluginsJsonPath)) {
-        const plugins = JSON.parse(await readFile(pluginsJsonPath, "utf-8"));
+        let plugins: unknown;
+        try {
+          plugins = JSON.parse(await readFile(pluginsJsonPath, "utf-8"));
+        } catch (err) {
+          throw new Error(
+            `Failed to parse plugins/installed_plugins.json: ${(err as Error).message}`,
+            { cause: err },
+          );
+        }
         const remapped = pathMapper.remapPluginPaths(plugins, this.claudeDir);
         await writeFile(pluginsJsonPath, JSON.stringify(remapped, null, 2));
       }
@@ -151,7 +172,15 @@ export class PullCommand {
       // known_marketplaces.json
       const marketplacesPath = join(tmpConfigDir, "plugins", "known_marketplaces.json");
       if (existsSync(marketplacesPath)) {
-        const mp = JSON.parse(await readFile(marketplacesPath, "utf-8"));
+        let mp: unknown;
+        try {
+          mp = JSON.parse(await readFile(marketplacesPath, "utf-8"));
+        } catch (err) {
+          throw new Error(
+            `Failed to parse plugins/known_marketplaces.json: ${(err as Error).message}`,
+            { cause: err },
+          );
+        }
         const remapped = pathMapper.remapPluginPaths(mp, this.claudeDir);
         await writeFile(marketplacesPath, JSON.stringify(remapped, null, 2));
       }
@@ -197,15 +226,41 @@ export class PullCommand {
       // 7a. Deep merge settings.json with hook filtering
       if (existsSync(remoteSettingsPath)) {
         const localSettingsPath = join(this.claudeDir, "settings.json");
-        const remoteSettings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
+        let remoteSettings: Record<string, unknown>;
+        try {
+          remoteSettings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
+        } catch (err) {
+          throw new Error(`Failed to parse remote settings.json: ${(err as Error).message}`, {
+            cause: err,
+          });
+        }
 
-        // Security: strip all hooks from remote to prevent code injection
-        if (remoteSettings && typeof remoteSettings === "object" && "hooks" in remoteSettings) {
-          delete remoteSettings.hooks;
+        // Security: strip keys that can execute code or modify permissions
+        const DANGEROUS_KEYS = [
+          "hooks",
+          "mcpServers",
+          "env",
+          "permissions",
+          "allowedTools",
+          "apiKeyHelper",
+        ];
+        if (remoteSettings && typeof remoteSettings === "object") {
+          for (const key of DANGEROUS_KEYS) {
+            if (key in remoteSettings) {
+              delete remoteSettings[key];
+            }
+          }
         }
 
         if (existsSync(localSettingsPath) && !result.overrideDetected) {
-          const localSettings = JSON.parse(await readFile(localSettingsPath, "utf-8"));
+          let localSettings: Record<string, unknown>;
+          try {
+            localSettings = JSON.parse(await readFile(localSettingsPath, "utf-8"));
+          } catch (err) {
+            throw new Error(`Failed to parse local settings.json: ${(err as Error).message}`, {
+              cause: err,
+            });
+          }
           const merged = merger.deepMergeJson(localSettings, remoteSettings);
           await writeFile(localSettingsPath, JSON.stringify(merged, null, 2));
         } else {
@@ -306,6 +361,20 @@ export class PullCommand {
       return { machine: marker.machine, timestamp: marker.timestamp };
     } catch {
       return null;
+    }
+  }
+
+  private async removeNestedSymlinks(dir: string): Promise<void> {
+    if (!existsSync(dir)) return;
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isSymbolicLink()) {
+        output.warn(`Removing nested symlink in store: ${entry.name}`);
+        await rm(fullPath);
+      } else if (entry.isDirectory()) {
+        await this.removeNestedSymlinks(fullPath);
+      }
     }
   }
 

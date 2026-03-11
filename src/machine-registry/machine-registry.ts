@@ -43,15 +43,6 @@ export class MachineRegistry {
     await this.saveManifest(manifest);
   }
 
-  async updateLastSync(machineId: string): Promise<void> {
-    const manifest = await this.loadManifest();
-    const machine = manifest.machines.find((m) => m.machineId === machineId);
-    if (machine) {
-      machine.lastSync = new Date().toISOString();
-      await this.saveManifest(manifest);
-    }
-  }
-
   async conditionalRegister(
     machineId: string,
     hostname: string,

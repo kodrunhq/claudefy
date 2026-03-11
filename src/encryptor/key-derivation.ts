@@ -1,9 +1,9 @@
 import { pbkdf2 } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
-const LINE_SALT = "claudefy-line-v1";
-const FILE_SALT = "claudefy-file-v1";
-const PBKDF2_ITERATIONS = 100_000;
+const LINE_SALT_PREFIX = "claudefy-line-v2:";
+const FILE_SALT_PREFIX = "claudefy-file-v2:";
+const PBKDF2_ITERATIONS = 600_000;
 const KEY_LENGTH_BYTES = 32;
 
 function deriveKey(passphrase: string, salt: string): Uint8Array {
@@ -14,10 +14,10 @@ function deriveKey(passphrase: string, salt: string): Uint8Array {
   });
 }
 
-export function deriveLineKey(passphrase: string): Uint8Array {
-  return deriveKey(passphrase, LINE_SALT);
+export function deriveLineKey(passphrase: string, repoSalt: string): Uint8Array {
+  return deriveKey(passphrase, LINE_SALT_PREFIX + repoSalt);
 }
 
-export function deriveFileKey(passphrase: string): Uint8Array {
-  return deriveKey(passphrase, FILE_SALT);
+export function deriveFileKey(passphrase: string, repoSalt: string): Uint8Array {
+  return deriveKey(passphrase, FILE_SALT_PREFIX + repoSalt);
 }

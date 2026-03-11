@@ -11,6 +11,7 @@ import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { Encryptor } from "../encryptor/encryptor.js";
 import { SecretScanner } from "../secret-scanner/scanner.js";
 import { output } from "../output.js";
+import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
 
 export interface PushOptions {
   quiet: boolean;
@@ -66,8 +67,8 @@ export class PushCommand {
     }
 
     const storePath = gitAdapter.getStorePath();
-    const configDir = join(storePath, "config");
-    const unknownDir = join(storePath, "unknown");
+    const configDir = join(storePath, STORE_CONFIG_DIR);
+    const unknownDir = join(storePath, STORE_UNKNOWN_DIR);
 
     // 3. Build path mapper
     const links = await this.configManager.getLinks();
@@ -121,7 +122,7 @@ export class PushCommand {
           );
         }
 
-        const encryptor = new Encryptor(options.passphrase);
+        const encryptor = new Encryptor(options.passphrase, config.backend.url);
         const filesToEncrypt = new Set(findings.map((f) => f.file));
         for (const filePath of filesToEncrypt) {
           if (existsSync(filePath) && !filePath.endsWith(".age")) {
@@ -145,7 +146,7 @@ export class PushCommand {
 
     // 8. Conditional manifest update
     const hasRealChanges = !(await gitAdapter.isClean());
-    const registry = new MachineRegistry(join(storePath, "manifest.json"));
+    const registry = new MachineRegistry(join(storePath, STORE_MANIFEST_FILE));
     await registry.conditionalRegister(config.machineId, hostname(), platform(), hasRealChanges);
 
     // 9. Commit and push with branch support
@@ -206,7 +207,12 @@ export class PushCommand {
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
     if (itemName === "settings.json") {
-      const parsed = JSON.parse(text);
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Failed to parse ${itemName}: ${(err as Error).message}`, { cause: err });
+      }
       const normalized = pathMapper.normalizeSettingsPaths(parsed, this.claudeDir);
       return JSON.stringify(normalized, null, 2);
     }
@@ -214,7 +220,12 @@ export class PushCommand {
       itemName === "plugins/installed_plugins.json" ||
       itemName === "plugins/known_marketplaces.json"
     ) {
-      const parsed = JSON.parse(text);
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch (err) {
+        throw new Error(`Failed to parse ${itemName}: ${(err as Error).message}`, { cause: err });
+      }
       const normalized = pathMapper.normalizePluginPaths(parsed, this.claudeDir);
       return JSON.stringify(normalized, null, 2);
     }
@@ -369,20 +380,5 @@ export class PushCommand {
         await rm(join(storeDir, entry), { recursive: true });
       }
     }
-  }
-
-  private async collectFiles(dirPath: string): Promise<string[]> {
-    if (!existsSync(dirPath)) return [];
-    const results: string[] = [];
-    const entries = await readdir(dirPath, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        results.push(...(await this.collectFiles(fullPath)));
-      } else if (!entry.isSymbolicLink()) {
-        results.push(fullPath);
-      }
-    }
-    return results;
   }
 }

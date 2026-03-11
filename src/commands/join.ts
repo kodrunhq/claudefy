@@ -8,6 +8,7 @@ import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { hostname, platform } from "node:os";
 import { output } from "../output.js";
 import { promptExistingPassphrase } from "../encryptor/passphrase.js";
+import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
 
 export interface JoinOptions {
   backend: string;
@@ -69,8 +70,14 @@ export class JoinCommand {
       passphrase,
     });
 
+    // 4b. Detect encryption state from store
+    if (!options.skipEncryption && !passphrase) {
+      // No passphrase was needed/provided — store is not encrypted
+      await configManager.set("encryption.enabled", false);
+    }
+
     // 5. Register this machine and commit
-    const registry = new MachineRegistry(join(gitAdapter.getStorePath(), "manifest.json"));
+    const registry = new MachineRegistry(join(gitAdapter.getStorePath(), STORE_MANIFEST_FILE));
     await registry.register(config.machineId, hostname(), platform());
     const commitResult = await gitAdapter.commitAndPush(
       `sync: ${config.machineId} joined`,
@@ -97,8 +104,8 @@ export class JoinCommand {
   }
 
   private async storeHasAgeFiles(storePath: string): Promise<boolean> {
-    const configDir = join(storePath, "config");
-    const unknownDir = join(storePath, "unknown");
+    const configDir = join(storePath, STORE_CONFIG_DIR);
+    const unknownDir = join(storePath, STORE_UNKNOWN_DIR);
     for (const dir of [configDir, unknownDir]) {
       try {
         const stats = await lstat(dir);

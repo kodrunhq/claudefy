@@ -55,8 +55,16 @@ export class ConfigManager {
   }
 
   async load(): Promise<ClaudefyConfig> {
-    const raw = await readFile(join(this.configDir, CONFIG_FILE), "utf-8");
-    return JSON.parse(raw);
+    const path = join(this.configDir, CONFIG_FILE);
+    const raw = await readFile(path, "utf-8");
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new Error(
+        `Corrupt config file "${path}": ${(err as Error).message}. Delete and re-run 'claudefy init'.`,
+        { cause: err },
+      );
+    }
   }
 
   async set(key: string, value: unknown): Promise<void> {
@@ -105,34 +113,28 @@ export class ConfigManager {
     const path = join(this.configDir, LINKS_FILE);
     if (!existsSync(path)) return {};
     const raw = await readFile(path, "utf-8");
-    return JSON.parse(raw);
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`Corrupt links file "${path}": ${(err as Error).message}`, { cause: err });
+    }
   }
 
   async getSyncFilter(): Promise<SyncFilterConfig> {
     const path = join(this.configDir, SYNC_FILTER_FILE);
     if (!existsSync(path)) return { ...DEFAULT_SYNC_FILTER };
     const raw = await readFile(path, "utf-8");
-    return JSON.parse(raw);
-  }
-
-  async setFilterOverride(name: string, tier: "allow" | "deny"): Promise<void> {
-    const filter = await this.getSyncFilter();
-    filter.denylist = filter.denylist.filter((d) => d !== name);
-    filter.allowlist = filter.allowlist.filter((a) => a !== name);
-    if (tier === "allow") {
-      filter.allowlist.push(name);
-    } else {
-      filter.denylist.push(name);
+    try {
+      return JSON.parse(raw);
+    } catch (err) {
+      throw new Error(`Corrupt sync filter file "${path}": ${(err as Error).message}`, {
+        cause: err,
+      });
     }
-    await this.saveSyncFilter(filter);
   }
 
   isInitialized(): boolean {
     return existsSync(join(this.configDir, CONFIG_FILE));
-  }
-
-  getConfigDir(): string {
-    return this.configDir;
   }
 
   private async saveConfig(config: ClaudefyConfig): Promise<void> {

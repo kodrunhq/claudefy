@@ -15,7 +15,7 @@ export class BackupManager {
     const backupPath = join(this.backupsDir, backupName);
 
     await mkdir(backupPath, { recursive: true });
-    await cp(claudeDir, backupPath, { recursive: true });
+    await cp(claudeDir, backupPath, { recursive: true, verbatimSymlinks: true });
 
     return backupPath;
   }
@@ -23,7 +23,7 @@ export class BackupManager {
   getBackupPath(name: string): string {
     const resolved = resolve(this.backupsDir, name);
     const rel = relative(this.backupsDir, resolved);
-    if (rel.startsWith("..") || resolve(resolved) !== resolved) {
+    if (rel.startsWith("..")) {
       throw new Error(`Invalid backup name: "${name}"`);
     }
     return resolved;

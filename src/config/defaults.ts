@@ -28,6 +28,10 @@ export const DEFAULT_SYNC_FILTER: SyncFilterConfig = {
   ],
 };
 
+export const STORE_CONFIG_DIR = "config";
+export const STORE_UNKNOWN_DIR = "unknown";
+export const STORE_MANIFEST_FILE = "manifest.json";
+
 export const CLAUDEFY_DIR = ".claudefy";
 export const CONFIG_FILE = "config.json";
 export const LINKS_FILE = "links.json";
