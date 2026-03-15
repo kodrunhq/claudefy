@@ -7,13 +7,31 @@ export class Merger {
   ): Record<string, unknown> {
     return deepmerge(local, remote, {
       arrayMerge: (target: unknown[], source: unknown[]) => {
-        const key = this.findArrayKey(source);
-        if (!key) return source;
+        // Primitive arrays: strict-equality union
+        if (source.length > 0 && typeof source[0] !== "object") {
+          const seen = new Set(source);
+          const localOnly = target.filter((item) => !seen.has(item));
+          return [...source, ...localOnly];
+        }
 
-        const remoteKeys = new Set(source.map((item) => (item as Record<string, unknown>)[key]));
-        const localOnly = target.filter(
-          (item) => !remoteKeys.has((item as Record<string, unknown>)[key]),
-        );
+        // Empty source: preserve target
+        if (source.length === 0) {
+          return [...target];
+        }
+
+        // Object arrays: try key-based dedup
+        const key = this.findArrayKey(source);
+        if (key) {
+          const remoteKeys = new Set(source.map((item) => (item as Record<string, unknown>)[key]));
+          const localOnly = target.filter(
+            (item) => !remoteKeys.has((item as Record<string, unknown>)[key]),
+          );
+          return [...source, ...localOnly];
+        }
+
+        // Object arrays without identifiable key: JSON-based dedup
+        const sourceJson = new Set(source.map((item) => JSON.stringify(item)));
+        const localOnly = target.filter((item) => !sourceJson.has(JSON.stringify(item)));
         return [...source, ...localOnly];
       },
     });

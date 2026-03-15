@@ -8,8 +8,20 @@ export interface ClaudefyConfig {
     enabled: boolean;
     useKeychain: boolean;
     cacheDuration: string;
+    mode?: "reactive" | "full";
   };
   machineId: string;
+  secretScanner?: {
+    customPatterns: Array<{ name: string; regex: string; flags?: string }>;
+  };
+  backups?: {
+    maxCount: number;
+    maxAgeDays: number;
+  };
+  claudeJson?: {
+    sync: boolean;
+    syncMcpServers: boolean;
+  };
 }
 
 export interface LinksConfig {

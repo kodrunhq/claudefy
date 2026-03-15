@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { BackupManager } from "../backup-manager/backup-manager.js";
 import { output } from "../output.js";
+import { withLock } from "../lockfile/lockfile.js";
 
 export interface RestoreOptions {
   quiet: boolean;
@@ -48,42 +49,45 @@ export class RestoreCommand {
   }
 
   async executeInteractive(options: RestoreOptions): Promise<void> {
-    const backups = await this.listAvailableBackups();
-    if (backups.length === 0) {
-      output.info("No backups available.");
-      return;
-    }
-
-    console.log("\nAvailable backups:\n");
-    for (let i = 0; i < backups.length; i++) {
-      console.log(`  ${i + 1}. ${backups[i]}`);
-    }
-    console.log();
-
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    const ask = (question: string): Promise<string> =>
-      new Promise((resolve) => rl.question(question, resolve));
-
-    try {
-      const indexStr = await ask("Enter backup number to restore: ");
-      const index = parseInt(indexStr, 10) - 1;
-      if (isNaN(index) || index < 0 || index >= backups.length) {
-        output.error("Invalid selection.");
+    const claudefyDir = join(this.homeDir, ".claudefy");
+    await withLock("restore", !!options.quiet, claudefyDir, async () => {
+      const backups = await this.listAvailableBackups();
+      if (backups.length === 0) {
+        output.info("No backups available.");
         return;
       }
 
-      const selected = backups[index];
-      const confirm = await ask(
-        `This will replace ~/.claude with backup "${selected}". Continue? (y/N) `,
-      );
-      if (confirm.toLowerCase() !== "y") {
-        output.info("Restore cancelled.");
-        return;
+      console.log("\nAvailable backups:\n");
+      for (let i = 0; i < backups.length; i++) {
+        console.log(`  ${i + 1}. ${backups[i]}`);
       }
+      console.log();
 
-      await this.restoreByName(selected, options);
-    } finally {
-      rl.close();
-    }
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      const ask = (question: string): Promise<string> =>
+        new Promise((resolve) => rl.question(question, resolve));
+
+      try {
+        const indexStr = await ask("Enter backup number to restore: ");
+        const index = parseInt(indexStr, 10) - 1;
+        if (isNaN(index) || index < 0 || index >= backups.length) {
+          output.error("Invalid selection.");
+          return;
+        }
+
+        const selected = backups[index];
+        const confirm = await ask(
+          `This will replace ~/.claude with backup "${selected}". Continue? (y/N) `,
+        );
+        if (confirm.toLowerCase() !== "y") {
+          output.info("Restore cancelled.");
+          return;
+        }
+
+        await this.restoreByName(selected, options);
+      } finally {
+        rl.close();
+      }
+    });
   }
 }

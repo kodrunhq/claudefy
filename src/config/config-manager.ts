@@ -43,6 +43,7 @@ export class ConfigManager {
         enabled: true,
         useKeychain: options?.useKeychain ?? false,
         cacheDuration: "0",
+        mode: "reactive" as const,
       },
       machineId,
     };

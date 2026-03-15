@@ -83,6 +83,53 @@ describe("SyncFilter", () => {
     expect(names).toContain("get-shit-done");
   });
 
+  it("classifies CLAUDE.md as allow", async () => {
+    await writeFile(join(claudeDir, "CLAUDE.md"), "# Memory");
+    const result = await syncFilter.classify(claudeDir);
+    const names = result.allowlist.map((i) => i.name);
+    expect(names).toContain("CLAUDE.md");
+  });
+
+  it("classifies MEMORY.md as allow", async () => {
+    await writeFile(join(claudeDir, "MEMORY.md"), "# Auto memory");
+    const result = await syncFilter.classify(claudeDir);
+    const names = result.allowlist.map((i) => i.name);
+    expect(names).toContain("MEMORY.md");
+  });
+
+  it("classifies new denylist items as deny", async () => {
+    const denyItems = ["statsig", "telemetry", "ide", "debug", "todos"];
+    for (const item of denyItems) {
+      await mkdir(join(claudeDir, item), { recursive: true });
+    }
+    await writeFile(join(claudeDir, "stats-cache.json"), "{}");
+    await writeFile(join(claudeDir, "settings.local.json"), "{}");
+
+    const result = await syncFilter.classify(claudeDir);
+    const denyNames = result.denylist.map((i) => i.name);
+
+    for (const item of denyItems) {
+      expect(denyNames).toContain(item);
+    }
+    expect(denyNames).toContain("stats-cache.json");
+    expect(denyNames).toContain("settings.local.json");
+  });
+
+  it("denies settings.local.json even if user allowlists it", async () => {
+    const customFilter = new SyncFilter({
+      allowlist: ["settings.local.json", "commands"],
+      denylist: [],
+    });
+    await writeFile(join(claudeDir, "settings.local.json"), "{}");
+
+    const result = await customFilter.classify(claudeDir);
+    const allowNames = result.allowlist.map((i) => i.name);
+    const denyNames = result.denylist.map((i) => i.name);
+
+    expect(allowNames).not.toContain("settings.local.json");
+    expect(denyNames).toContain("settings.local.json");
+  });
+
   it("denies .credentials.json even if user adds it to allowlist", async () => {
     await writeFile(join(claudeDir, ".credentials.json"), '{"api_key": "secret"}');
 

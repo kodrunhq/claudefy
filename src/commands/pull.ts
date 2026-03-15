@@ -1,6 +1,6 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { simpleGit } from "simple-git";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -11,6 +11,8 @@ import { Merger } from "../merger/merger.js";
 import { BackupManager } from "../backup-manager/backup-manager.js";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR } from "../config/defaults.js";
+import { Lockfile } from "../lockfile/lockfile.js";
+import { ClaudeJsonSync } from "../claude-json-sync/claude-json-sync.js";
 
 export interface PullOptions {
   quiet: boolean;
@@ -36,11 +38,19 @@ export class PullCommand {
   }
 
   async execute(options: PullOptions): Promise<PullResult> {
+    const claudefyDir = join(this.homeDir, ".claudefy");
+    const lock = Lockfile.tryAcquire("pull", !!options.quiet, claudefyDir);
+    if (!lock) return { overrideDetected: false, filesUpdated: 0 };
+    try {
+      return await this.executeLocked(options, claudefyDir);
+    } finally {
+      lock.release();
+    }
+  }
+
+  private async executeLocked(options: PullOptions, claudefyDir: string): Promise<PullResult> {
     const config = await this.configManager.load();
     const result: PullResult = { overrideDetected: false, filesUpdated: 0 };
-
-    // 1. Initialize git adapter, switch to machine branch, pull & merge main
-    const claudefyDir = join(this.homeDir, ".claudefy");
     const gitAdapter = new GitAdapter(claudefyDir);
     await gitAdapter.initStore(config.backend.url);
     await gitAdapter.ensureMachineBranch(config.machineId);
@@ -91,239 +101,276 @@ export class PullCommand {
     if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
     await mkdir(tmpDir, { recursive: true });
 
-    const cleanup = () => {
-      try {
-        rmSync(tmpDir, { recursive: true, force: true });
-      } catch {
-        // Best effort
-      }
-      process.exit(1);
+    let interrupted = false;
+
+    const onSignal = (signal: string) => {
+      interrupted = true;
+      process.once(signal, () => process.exit(128 + (signal === "SIGINT" ? 2 : 15)));
     };
-    process.once("SIGINT", cleanup);
-    process.once("SIGTERM", cleanup);
+
+    const sigintHandler = () => onSignal("SIGINT");
+    const sigtermHandler = () => onSignal("SIGTERM");
+    process.once("SIGINT", sigintHandler);
+    process.once("SIGTERM", sigtermHandler);
 
     try {
-      // 4. Copy store to temp dir
-      const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
-      const storeUnknownDir = join(storePath, STORE_UNKNOWN_DIR);
-      const tmpConfigDir = join(tmpDir, "config");
-      const tmpUnknownDir = join(tmpDir, "unknown");
-      if (existsSync(storeConfigDir)) await cp(storeConfigDir, tmpConfigDir, { recursive: true });
-      if (existsSync(storeUnknownDir))
-        await cp(storeUnknownDir, tmpUnknownDir, { recursive: true });
+      // Use do/while(false) so interrupted checks can break out of the pipeline
+      do {
+        // 4. Copy store to temp dir
+        const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
+        const storeUnknownDir = join(storePath, STORE_UNKNOWN_DIR);
+        const tmpConfigDir = join(tmpDir, "config");
+        const tmpUnknownDir = join(tmpDir, "unknown");
+        if (existsSync(storeConfigDir)) await cp(storeConfigDir, tmpConfigDir, { recursive: true });
+        if (existsSync(storeUnknownDir))
+          await cp(storeUnknownDir, tmpUnknownDir, { recursive: true });
 
-      // Security: remove any symlinks nested inside subdirectories
-      // (top-level symlinks are checked later, but cp() follows nested ones)
-      await this.removeNestedSymlinks(tmpConfigDir);
-      await this.removeNestedSymlinks(tmpUnknownDir);
+        // Security: remove any symlinks nested inside subdirectories
+        // (top-level symlinks are checked later, but cp() follows nested ones)
+        await this.removeNestedSymlinks(tmpConfigDir);
+        await this.removeNestedSymlinks(tmpUnknownDir);
 
-      // 5. Decrypt any .age files in temp dir
-      const encryptedFiles = await this.collectAgeFiles(tmpConfigDir, tmpUnknownDir);
-      if (encryptedFiles.length > 0 && !options.skipEncryption) {
-        if (!options.passphrase) {
-          throw new Error(
-            "Encrypted files found but no passphrase available. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
-          );
-        }
-        const encryptor = new Encryptor(options.passphrase, config.backend.url);
-        if (existsSync(tmpConfigDir)) {
-          await encryptor.decryptDirectory(tmpConfigDir);
-        }
-        if (existsSync(tmpUnknownDir)) {
-          await encryptor.decryptDirectory(tmpUnknownDir);
-        }
-      }
+        if (interrupted) break;
 
-      // 6. Remap paths (canonical -> local) in temp dir
-      const links = await this.configManager.getLinks();
-      const pathMapper = new PathMapper(links);
-
-      // settings.json
-      const remoteSettingsPath = join(tmpConfigDir, "settings.json");
-      if (existsSync(remoteSettingsPath)) {
-        let settings: Record<string, unknown>;
-        try {
-          settings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
-        } catch (err) {
-          throw new Error(`Failed to parse settings.json: ${(err as Error).message}`, {
-            cause: err,
-          });
-        }
-        const remapped = pathMapper.remapSettingsPaths(settings, this.claudeDir);
-        await writeFile(remoteSettingsPath, JSON.stringify(remapped, null, 2));
-      }
-
-      // installed_plugins.json
-      const pluginsJsonPath = join(tmpConfigDir, "plugins", "installed_plugins.json");
-      if (existsSync(pluginsJsonPath)) {
-        let plugins: unknown;
-        try {
-          plugins = JSON.parse(await readFile(pluginsJsonPath, "utf-8"));
-        } catch (err) {
-          throw new Error(
-            `Failed to parse plugins/installed_plugins.json: ${(err as Error).message}`,
-            { cause: err },
-          );
-        }
-        const remapped = pathMapper.remapPluginPaths(plugins, this.claudeDir);
-        await writeFile(pluginsJsonPath, JSON.stringify(remapped, null, 2));
-      }
-
-      // known_marketplaces.json
-      const marketplacesPath = join(tmpConfigDir, "plugins", "known_marketplaces.json");
-      if (existsSync(marketplacesPath)) {
-        let mp: unknown;
-        try {
-          mp = JSON.parse(await readFile(marketplacesPath, "utf-8"));
-        } catch (err) {
-          throw new Error(
-            `Failed to parse plugins/known_marketplaces.json: ${(err as Error).message}`,
-            { cause: err },
-          );
-        }
-        const remapped = pathMapper.remapPluginPaths(mp, this.claudeDir);
-        await writeFile(marketplacesPath, JSON.stringify(remapped, null, 2));
-      }
-
-      // history.jsonl
-      const historyPath = join(tmpConfigDir, "history.jsonl");
-      if (existsSync(historyPath)) {
-        const content = await readFile(historyPath, "utf-8");
-        const remapped =
-          content
-            .split("\n")
-            .filter(Boolean)
-            .map((line) => pathMapper.remapJsonlLine(line))
-            .join("\n") + "\n";
-        await writeFile(historyPath, remapped);
-      }
-
-      // projects/ directory renaming (canonical -> local)
-      const projectsDir = join(tmpConfigDir, "projects");
-      if (existsSync(projectsDir)) {
-        const projectDirs = await readdir(projectsDir);
-        for (const dirName of projectDirs) {
-          const localName = pathMapper.remapDirName(dirName);
-          if (localName) {
-            const destPath = resolve(join(projectsDir, localName));
-            // Path containment: ensure renamed dir stays within projects/
-            const rel = relative(resolve(projectsDir), destPath);
-            if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
-              output.warn(
-                `Skipping directory rename "${dirName}" -> "${localName}": path escapes projects directory`,
-              );
-              continue;
-            }
-            await rename(join(projectsDir, dirName), destPath);
+        // 5. Decrypt any .age files in temp dir
+        const encryptedFiles = await this.collectAgeFiles(tmpConfigDir, tmpUnknownDir);
+        if (encryptedFiles.length > 0 && !options.skipEncryption) {
+          if (!options.passphrase) {
+            throw new Error(
+              "Encrypted files found but no passphrase available. Set CLAUDEFY_PASSPHRASE or store it in your OS keychain via 'claudefy init'.",
+            );
           }
-        }
-      }
-
-      // 7. Merge and copy to ~/.claude
-      const merger = new Merger();
-      await mkdir(this.claudeDir, { recursive: true });
-
-      // 7a. Deep merge settings.json with hook filtering
-      if (existsSync(remoteSettingsPath)) {
-        const localSettingsPath = join(this.claudeDir, "settings.json");
-        let remoteSettings: Record<string, unknown>;
-        try {
-          remoteSettings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
-        } catch (err) {
-          throw new Error(`Failed to parse remote settings.json: ${(err as Error).message}`, {
-            cause: err,
-          });
-        }
-
-        // Security: strip keys that can execute code or modify permissions
-        const DANGEROUS_KEYS = [
-          "hooks",
-          "mcpServers",
-          "env",
-          "permissions",
-          "allowedTools",
-          "apiKeyHelper",
-        ];
-        if (remoteSettings && typeof remoteSettings === "object") {
-          for (const key of DANGEROUS_KEYS) {
-            if (key in remoteSettings) {
-              delete remoteSettings[key];
-            }
+          const encryptor = new Encryptor(options.passphrase, config.backend.url);
+          if (existsSync(tmpConfigDir)) {
+            await encryptor.decryptDirectory(tmpConfigDir);
+          }
+          if (existsSync(tmpUnknownDir)) {
+            await encryptor.decryptDirectory(tmpUnknownDir);
           }
         }
 
-        if (existsSync(localSettingsPath) && !result.overrideDetected) {
-          let localSettings: Record<string, unknown>;
+        if (interrupted) break;
+
+        // 6. Remap paths (canonical -> local) in temp dir
+        const links = await this.configManager.getLinks();
+        const pathMapper = new PathMapper(links);
+
+        // settings.json
+        const remoteSettingsPath = join(tmpConfigDir, "settings.json");
+        if (existsSync(remoteSettingsPath)) {
+          let settings: Record<string, unknown>;
           try {
-            localSettings = JSON.parse(await readFile(localSettingsPath, "utf-8"));
+            settings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
           } catch (err) {
-            throw new Error(`Failed to parse local settings.json: ${(err as Error).message}`, {
+            throw new Error(`Failed to parse settings.json: ${(err as Error).message}`, {
               cause: err,
             });
           }
-          const merged = merger.deepMergeJson(localSettings, remoteSettings);
-          await writeFile(localSettingsPath, JSON.stringify(merged, null, 2));
-        } else {
-          await writeFile(localSettingsPath, JSON.stringify(remoteSettings, null, 2));
+          const remapped = pathMapper.remapSettingsPaths(settings, this.claudeDir);
+          await writeFile(remoteSettingsPath, JSON.stringify(remapped, null, 2));
         }
-        result.filesUpdated++;
-      }
 
-      // 7b. Copy remaining config items (remote overwrites local)
-      if (existsSync(tmpConfigDir)) {
-        const entries = await readdir(tmpConfigDir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (entry.name === "settings.json") continue; // Already handled
+        // installed_plugins.json
+        const pluginsJsonPath = join(tmpConfigDir, "plugins", "installed_plugins.json");
+        if (existsSync(pluginsJsonPath)) {
+          let plugins: unknown;
+          try {
+            plugins = JSON.parse(await readFile(pluginsJsonPath, "utf-8"));
+          } catch (err) {
+            throw new Error(
+              `Failed to parse plugins/installed_plugins.json: ${(err as Error).message}`,
+              { cause: err },
+            );
+          }
+          const remapped = pathMapper.remapPluginPaths(plugins, this.claudeDir);
+          await writeFile(pluginsJsonPath, JSON.stringify(remapped, null, 2));
+        }
 
-          // Security: skip symlinks to prevent path traversal attacks
-          if (entry.isSymbolicLink()) {
-            output.warn(`Skipping symlink in config store: ${entry.name}`);
-            continue;
+        // known_marketplaces.json
+        const marketplacesPath = join(tmpConfigDir, "plugins", "known_marketplaces.json");
+        if (existsSync(marketplacesPath)) {
+          let mp: unknown;
+          try {
+            mp = JSON.parse(await readFile(marketplacesPath, "utf-8"));
+          } catch (err) {
+            throw new Error(
+              `Failed to parse plugins/known_marketplaces.json: ${(err as Error).message}`,
+              { cause: err },
+            );
+          }
+          const remapped = pathMapper.remapPluginPaths(mp, this.claudeDir);
+          await writeFile(marketplacesPath, JSON.stringify(remapped, null, 2));
+        }
+
+        // history.jsonl
+        const historyPath = join(tmpConfigDir, "history.jsonl");
+        if (existsSync(historyPath)) {
+          const content = await readFile(historyPath, "utf-8");
+          const remapped =
+            content
+              .split("\n")
+              .filter(Boolean)
+              .map((line) => pathMapper.remapJsonlLine(line))
+              .join("\n") + "\n";
+          await writeFile(historyPath, remapped);
+        }
+
+        // projects/ directory renaming (canonical -> local)
+        const projectsDir = join(tmpConfigDir, "projects");
+        if (existsSync(projectsDir)) {
+          const projectDirs = await readdir(projectsDir);
+          for (const dirName of projectDirs) {
+            const localName = pathMapper.remapDirName(dirName);
+            if (localName) {
+              const destPath = resolve(join(projectsDir, localName));
+              // Path containment: ensure renamed dir stays within projects/
+              const rel = relative(resolve(projectsDir), destPath);
+              if (rel.startsWith("..") || resolve(destPath) === resolve(projectsDir)) {
+                output.warn(
+                  `Skipping directory rename "${dirName}" -> "${localName}": path escapes projects directory`,
+                );
+                continue;
+              }
+              await rename(join(projectsDir, dirName), destPath);
+            }
+          }
+        }
+
+        if (interrupted) break;
+
+        // 7. Merge and copy to ~/.claude
+        const merger = new Merger();
+        await mkdir(this.claudeDir, { recursive: true });
+
+        // 7a. Deep merge settings.json with hook filtering
+        if (existsSync(remoteSettingsPath)) {
+          const localSettingsPath = join(this.claudeDir, "settings.json");
+          let remoteSettings: Record<string, unknown>;
+          try {
+            remoteSettings = JSON.parse(await readFile(remoteSettingsPath, "utf-8"));
+          } catch (err) {
+            throw new Error(`Failed to parse remote settings.json: ${(err as Error).message}`, {
+              cause: err,
+            });
           }
 
-          const src = join(tmpConfigDir, entry.name);
-          const dest = resolve(join(this.claudeDir, entry.name));
-
-          // Path containment: ensure destination stays within ~/.claude/
-          const relPath = relative(resolvedClaudeDir, dest);
-          if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
-            output.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
-            continue;
+          // Security: strip keys that can execute code or modify permissions
+          const DANGEROUS_KEYS = [
+            "hooks",
+            "mcpServers",
+            "env",
+            "permissions",
+            "allowedTools",
+            "apiKeyHelper",
+          ];
+          if (remoteSettings && typeof remoteSettings === "object") {
+            for (const key of DANGEROUS_KEYS) {
+              if (key in remoteSettings) {
+                delete remoteSettings[key];
+              }
+            }
           }
 
-          await cp(src, dest, { recursive: true, force: true });
+          if (existsSync(localSettingsPath) && !result.overrideDetected) {
+            let localSettings: Record<string, unknown>;
+            try {
+              localSettings = JSON.parse(await readFile(localSettingsPath, "utf-8"));
+            } catch (err) {
+              throw new Error(`Failed to parse local settings.json: ${(err as Error).message}`, {
+                cause: err,
+              });
+            }
+            const merged = merger.deepMergeJson(localSettings, remoteSettings);
+            await writeFile(localSettingsPath, JSON.stringify(merged, null, 2));
+          } else {
+            await writeFile(localSettingsPath, JSON.stringify(remoteSettings, null, 2));
+          }
           result.filesUpdated++;
         }
-      }
 
-      // 7c. Copy unknown items back
-      if (existsSync(tmpUnknownDir)) {
-        const entries = await readdir(tmpUnknownDir, { withFileTypes: true });
-        for (const entry of entries) {
-          // Security: skip symlinks to prevent path traversal attacks
-          if (entry.isSymbolicLink()) {
-            output.warn(`Skipping symlink in unknown store: ${entry.name}`);
-            continue;
+        if (interrupted) break;
+
+        // 7b. Copy remaining config items (remote overwrites local)
+        if (existsSync(tmpConfigDir)) {
+          const entries = await readdir(tmpConfigDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.name === "settings.json") continue; // Already handled
+
+            // Security: skip symlinks to prevent path traversal attacks
+            if (entry.isSymbolicLink()) {
+              output.warn(`Skipping symlink in config store: ${entry.name}`);
+              continue;
+            }
+
+            const src = join(tmpConfigDir, entry.name);
+            const dest = resolve(join(this.claudeDir, entry.name));
+
+            // Path containment: ensure destination stays within ~/.claude/
+            const relPath = relative(resolvedClaudeDir, dest);
+            if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
+              output.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
+              continue;
+            }
+
+            await cp(src, dest, { recursive: true, force: true });
+            result.filesUpdated++;
           }
-
-          const src = join(tmpUnknownDir, entry.name);
-          const dest = resolve(join(this.claudeDir, entry.name));
-
-          // Path containment: ensure destination stays within ~/.claude/
-          const relPath = relative(resolvedClaudeDir, dest);
-          if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
-            output.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
-            continue;
-          }
-
-          await cp(src, dest, { recursive: true, force: true });
-          result.filesUpdated++;
         }
-      }
+
+        if (interrupted) break;
+
+        // 7c. Copy unknown items back
+        if (existsSync(tmpUnknownDir)) {
+          const entries = await readdir(tmpUnknownDir, { withFileTypes: true });
+          for (const entry of entries) {
+            // Security: skip symlinks to prevent path traversal attacks
+            if (entry.isSymbolicLink()) {
+              output.warn(`Skipping symlink in unknown store: ${entry.name}`);
+              continue;
+            }
+
+            const src = join(tmpUnknownDir, entry.name);
+            const dest = resolve(join(this.claudeDir, entry.name));
+
+            // Path containment: ensure destination stays within ~/.claude/
+            const relPath = relative(resolvedClaudeDir, dest);
+            if (relPath.startsWith("..") || resolve(dest) === resolvedClaudeDir) {
+              output.warn(`Skipping "${entry.name}": resolved path escapes ~/.claude/`);
+              continue;
+            }
+
+            await cp(src, dest, { recursive: true, force: true });
+            result.filesUpdated++;
+          }
+        }
+        // 8. Merge ~/.claude.json (if not interrupted)
+        if (!interrupted && config.claudeJson?.sync !== false) {
+          const storeFile = join(tmpConfigDir, "claude-json-sync.json");
+          if (existsSync(storeFile)) {
+            const claudeJsonPath = join(this.homeDir, ".claude.json");
+            const claudeJsonSync = new ClaudeJsonSync();
+            const merged = claudeJsonSync.merge({
+              claudeJsonPath,
+              storePath: storeFile,
+              homeDir: this.homeDir,
+              syncMcpServers: config.claudeJson?.syncMcpServers ?? false,
+            });
+            const tmpOut = join(tmpDir, "claude-json-merged.json");
+            await writeFile(tmpOut, JSON.stringify(merged, null, 2));
+            if (existsSync(claudeJsonPath)) {
+              const { statSync, chmodSync } = await import("node:fs");
+              const stat = statSync(claudeJsonPath);
+              chmodSync(tmpOut, stat.mode);
+            }
+            const { renameSync } = await import("node:fs");
+            renameSync(tmpOut, claudeJsonPath);
+          }
+        }
+      } while (false); // eslint-disable-line no-constant-condition
     } finally {
+      process.removeListener("SIGINT", sigintHandler);
+      process.removeListener("SIGTERM", sigtermHandler);
       if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
-      process.removeListener("SIGINT", cleanup);
-      process.removeListener("SIGTERM", cleanup);
     }
 
     // NO re-encryption step (store is never modified)

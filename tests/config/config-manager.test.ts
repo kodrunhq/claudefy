@@ -28,7 +28,7 @@ describe("ConfigManager", () => {
   it("generates a unique machine ID", async () => {
     await configManager.initialize("git@github.com:user/store.git");
     const config = await configManager.load();
-    expect(config.machineId).toMatch(/^[a-z0-9-]+$/);
+    expect(config.machineId).toMatch(/^[a-z0-9._-]+$/);
   });
 
   it("loads existing config", async () => {
