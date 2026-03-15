@@ -112,11 +112,7 @@ export class PushCommand {
         await this.syncItem(src, unknownDir, item.name, unknownHashes, changedFiles, null);
       }
 
-      // 6. Detect deletions — remove store entries not present in source
-      await this.removeDeleted(configDir, syncedConfigItems);
-      await this.removeDeleted(unknownDir, syncedUnknownItems);
-
-      // 6b. Extract syncable fields from ~/.claude.json
+      // 6b. Extract syncable fields from ~/.claude.json (before deletion detection)
       if (config.claudeJson?.sync !== false) {
         const claudeJsonPath = join(this.homeDir, ".claude.json");
         const claudeJsonStorePath = join(configDir, "claude-json-sync.json");
@@ -135,13 +131,18 @@ export class PushCommand {
               ? await readFile(claudeJsonStorePath, "utf-8").catch(() => "")
               : "";
             if (newContent !== existingContent) {
-              const { writeFileSync } = await import("node:fs");
-              writeFileSync(claudeJsonStorePath, newContent);
+              await writeFile(claudeJsonStorePath, newContent);
               changedFiles.push(claudeJsonStorePath);
             }
           }
         }
+        // Protect from deletion detection — not a ~/.claude item but lives in configDir
+        syncedConfigItems.push("claude-json-sync.json");
       }
+
+      // 6c. Detect deletions — remove store entries not present in source
+      await this.removeDeleted(configDir, syncedConfigItems);
+      await this.removeDeleted(unknownDir, syncedUnknownItems);
 
       // 7. Scan for secrets and encrypt files that contain them
       const filesToEncrypt = new Set<string>();

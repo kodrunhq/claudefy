@@ -101,10 +101,10 @@ export class PullCommand {
     if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
     await mkdir(tmpDir, { recursive: true });
 
-    let interrupted = false;
+    let interruptedSignal: string | null = null;
 
     const onSignal = (signal: string) => {
-      interrupted = true;
+      interruptedSignal = signal;
       process.once(signal, () => process.exit(128 + (signal === "SIGINT" ? 2 : 15)));
     };
 
@@ -114,7 +114,7 @@ export class PullCommand {
     process.once("SIGTERM", sigtermHandler);
 
     try {
-      // Use do/while(false) so interrupted checks can break out of the pipeline
+      // Use do/while(false) so signal-interrupt checks can break out of the pipeline
       do {
         // 4. Copy store to temp dir
         const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
@@ -130,7 +130,7 @@ export class PullCommand {
         await this.removeNestedSymlinks(tmpConfigDir);
         await this.removeNestedSymlinks(tmpUnknownDir);
 
-        if (interrupted) break;
+        if (interruptedSignal) break;
 
         // 5. Decrypt any .age files in temp dir
         const encryptedFiles = await this.collectAgeFiles(tmpConfigDir, tmpUnknownDir);
@@ -149,7 +149,7 @@ export class PullCommand {
           }
         }
 
-        if (interrupted) break;
+        if (interruptedSignal) break;
 
         // 6. Remap paths (canonical -> local) in temp dir
         const links = await this.configManager.getLinks();
@@ -236,7 +236,7 @@ export class PullCommand {
           }
         }
 
-        if (interrupted) break;
+        if (interruptedSignal) break;
 
         // 7. Merge and copy to ~/.claude
         const merger = new Merger();
@@ -288,7 +288,7 @@ export class PullCommand {
           result.filesUpdated++;
         }
 
-        if (interrupted) break;
+        if (interruptedSignal) break;
 
         // 7b. Copy remaining config items (remote overwrites local)
         if (existsSync(tmpConfigDir)) {
@@ -317,7 +317,7 @@ export class PullCommand {
           }
         }
 
-        if (interrupted) break;
+        if (interruptedSignal) break;
 
         // 7c. Copy unknown items back
         if (existsSync(tmpUnknownDir)) {
@@ -344,7 +344,7 @@ export class PullCommand {
           }
         }
         // 8. Merge ~/.claude.json (if not interrupted)
-        if (!interrupted && config.claudeJson?.sync !== false) {
+        if (!interruptedSignal && config.claudeJson?.sync !== false) {
           const storeFile = join(tmpConfigDir, "claude-json-sync.json");
           if (existsSync(storeFile)) {
             const claudeJsonPath = join(this.homeDir, ".claude.json");
@@ -370,12 +370,12 @@ export class PullCommand {
     // NO re-encryption step (store is never modified)
     // NO commitAndPush (pull should not create commits)
 
-    if (interrupted) {
-      // Re-raise the signal so the process exits with the correct code (130/143)
+    if (interruptedSignal) {
+      // Re-raise the original signal so the process exits with the correct code (130/143)
       if (!options.quiet) {
         output.warn("Pull interrupted by signal.");
       }
-      process.kill(process.pid, "SIGINT");
+      process.kill(process.pid, interruptedSignal);
       return result;
     }
 
