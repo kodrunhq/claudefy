@@ -19,6 +19,15 @@ function isPidAlive(pid: number): boolean {
   }
 }
 
+// Sync I/O is intentional here — atomic lock acquisition with the `wx` flag
+// requires synchronous file operations to prevent TOCTOU races between
+// checking existence and creating the file.
+//
+// Re-entrancy contract: when a process already holds the lock (same PID),
+// tryAcquire returns a re-entrant Lockfile whose release() is a no-op.
+// This supports init→push and join→pull call chains in the same process.
+// Callers must NOT spawn subprocesses that also acquire the lock — only
+// same-PID in-process calls are re-entrant.
 export class Lockfile {
   private readonly lockPath: string;
   private readonly reentrant: boolean;
@@ -44,7 +53,8 @@ export class Lockfile {
           }
           if (!quiet) {
             output.info(
-              `Another claudefy operation is in progress (PID ${info.pid}, ${info.command}). Skipping.`,
+              `Another claudefy operation is in progress (PID ${info.pid}, ${info.command}). Skipping.\n` +
+                `  If this is wrong, delete ${lockPath} and retry.`,
             );
           }
           return null;
