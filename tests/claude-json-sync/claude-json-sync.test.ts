@@ -268,13 +268,9 @@ describe("ClaudeJsonSync", () => {
         syncMcpServers: true,
       });
 
-      const servers = result.mcpServers as Record<string, { command: string }>;
-      // Path traversal must be blocked — command should retain the raw sentinel, not resolve to a real path
-      expect(servers.evil.command).toContain("@@HOME@@");
-      // The resolved path must NOT be a valid filesystem path outside homeDir
-      const { resolve: pathResolve } = await import("node:path");
-      const resolved = pathResolve(servers.evil.command);
-      expect(resolved).not.toBe("/usr/bin/evil");
+      const servers = result.mcpServers as Record<string, unknown>;
+      // Path traversal must be blocked — the malicious server entry must not be present
+      expect(servers.evil).toBeUndefined();
     });
 
     it("rejects MCP server commands with shell metacharacters", async () => {
@@ -298,6 +294,29 @@ describe("ClaudeJsonSync", () => {
       const servers = result.mcpServers as Record<string, unknown>;
       expect(servers.safe).toBeDefined();
       expect(servers.malicious).toBeUndefined();
+    });
+
+    it("rejects MCP server commands with other shell metacharacters like redirection", async () => {
+      const remote = {
+        mcpServers: {
+          safe: { command: "npx", args: ["mcp-github"] },
+          redirectAttack: { command: "npx > /tmp/pwned", args: [] },
+        },
+      };
+      await writeFile(join(homeDir, ".claude.json"), "{}");
+      await writeFile(join(storeDir, "claude-json-sync.json"), JSON.stringify(remote));
+
+      const sync = new ClaudeJsonSync();
+      const result = sync.merge({
+        claudeJsonPath: join(homeDir, ".claude.json"),
+        storePath: join(storeDir, "claude-json-sync.json"),
+        homeDir,
+        syncMcpServers: true,
+      });
+
+      const servers = result.mcpServers as Record<string, unknown>;
+      expect(servers.safe).toBeDefined();
+      expect(servers.redirectAttack).toBeUndefined();
     });
 
     it("rejects MCP server args with shell metacharacters", async () => {

@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, relative, isAbsolute } from "node:path";
 import { output } from "../output.js";
 
 export interface ClaudeJsonSyncOptions {
@@ -80,13 +80,20 @@ export class ClaudeJsonSync {
       >;
 
       // Validate remote MCP server entries before merging
-      const shellMetacharPattern = /[;&|`$]/;
+      const shellMetacharPattern = /[;&|`$><\n\r(){}*\\]/;
       const validatedServers: Record<string, unknown> = {};
       for (const [name, cfg] of Object.entries(remoteServers)) {
         const server = cfg as Record<string, unknown>;
         if (typeof server.command === "string" && shellMetacharPattern.test(server.command)) {
           output.warn(
             `Skipping remote MCP server "${name}": command contains shell metacharacters`,
+          );
+          continue;
+        }
+        // Reject commands where @@HOME@@ sentinel was not resolved (e.g. path traversal rejected)
+        if (typeof server.command === "string" && server.command.includes("@@HOME@@")) {
+          output.warn(
+            `Skipping remote MCP server "${name}": command contains unresolved path sentinel`,
           );
           continue;
         }
@@ -131,7 +138,8 @@ export class ClaudeJsonSync {
       const expanded = homeDir + obj.slice("@@HOME@@".length);
       const resolved = resolve(expanded);
       // Prevent path traversal — resolved path must stay within homeDir
-      if (!resolved.startsWith(homeDir + "/") && resolved !== homeDir) {
+      const rel = relative(homeDir, resolved);
+      if (rel && (rel.startsWith("..") || isAbsolute(rel))) {
         output.warn(`Skipping unsafe @@HOME@@ path: ${obj}`);
         return obj;
       }

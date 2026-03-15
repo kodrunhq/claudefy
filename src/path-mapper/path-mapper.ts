@@ -96,7 +96,7 @@ export class PathMapper {
   }
 
   private pathToDirName(localPath: string): string {
-    // Claude Code encodes paths by replacing / with -
+    // Claude Code encodes paths by replacing path separators (/ or \) with -
     // e.g. /home/user/project -> -home-user-project
     return localPath.replace(/[\\/]/g, "-");
   }
