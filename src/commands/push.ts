@@ -119,19 +119,19 @@ export class PushCommand {
       // 6b. Extract syncable fields from ~/.claude.json
       if (config.claudeJson?.sync !== false) {
         const claudeJsonPath = join(this.homeDir, ".claude.json");
+        const claudeJsonStorePath = join(configDir, "claude-json-sync.json");
         if (existsSync(claudeJsonPath)) {
           const claudeJsonSync = new ClaudeJsonSync();
           const extracted = claudeJsonSync.extract({
             claudeJsonPath,
-            storePath: join(configDir, "claude-json-sync.json"),
+            storePath: claudeJsonStorePath,
             homeDir: this.homeDir,
             syncMcpServers: config.claudeJson?.syncMcpServers ?? false,
           });
           if (Object.keys(extracted).length > 0) {
-            const storePath = join(configDir, "claude-json-sync.json");
             const { writeFileSync } = await import("node:fs");
-            writeFileSync(storePath, JSON.stringify(extracted, null, 2));
-            changedFiles.push(storePath);
+            writeFileSync(claudeJsonStorePath, JSON.stringify(extracted, null, 2));
+            changedFiles.push(claudeJsonStorePath);
           }
         }
       }
