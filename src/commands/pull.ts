@@ -355,15 +355,9 @@ export class PullCommand {
               homeDir: this.homeDir,
               syncMcpServers: config.claudeJson?.syncMcpServers ?? false,
             });
-            const tmpOut = join(tmpDir, "claude-json-merged.json");
-            await writeFile(tmpOut, JSON.stringify(merged, null, 2));
-            if (existsSync(claudeJsonPath)) {
-              const { statSync, chmodSync } = await import("node:fs");
-              const stat = statSync(claudeJsonPath);
-              chmodSync(tmpOut, stat.mode);
-            }
-            const { renameSync } = await import("node:fs");
-            renameSync(tmpOut, claudeJsonPath);
+            // Write to target directly — renameSync fails across filesystems (EXDEV)
+            // when ~/.claudefy and ~/.claude.json are on different mounts
+            await writeFile(claudeJsonPath, JSON.stringify(merged, null, 2));
           }
         }
       } while (false); // eslint-disable-line no-constant-condition
@@ -375,6 +369,15 @@ export class PullCommand {
 
     // NO re-encryption step (store is never modified)
     // NO commitAndPush (pull should not create commits)
+
+    if (interrupted) {
+      // Re-raise the signal so the process exits with the correct code (130/143)
+      if (!options.quiet) {
+        output.warn("Pull interrupted by signal.");
+      }
+      process.kill(process.pid, "SIGINT");
+      return result;
+    }
 
     if (!options.quiet) {
       output.success(`Pull complete. ${result.filesUpdated} items updated.`);

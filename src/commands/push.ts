@@ -129,9 +129,16 @@ export class PushCommand {
             syncMcpServers: config.claudeJson?.syncMcpServers ?? false,
           });
           if (Object.keys(extracted).length > 0) {
-            const { writeFileSync } = await import("node:fs");
-            writeFileSync(claudeJsonStorePath, JSON.stringify(extracted, null, 2));
-            changedFiles.push(claudeJsonStorePath);
+            const newContent = JSON.stringify(extracted, null, 2);
+            // Only write if content changed — avoids unnecessary scanning/encryption
+            const existingContent = existsSync(claudeJsonStorePath)
+              ? await readFile(claudeJsonStorePath, "utf-8").catch(() => "")
+              : "";
+            if (newContent !== existingContent) {
+              const { writeFileSync } = await import("node:fs");
+              writeFileSync(claudeJsonStorePath, newContent);
+              changedFiles.push(claudeJsonStorePath);
+            }
           }
         }
       }

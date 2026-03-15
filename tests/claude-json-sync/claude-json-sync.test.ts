@@ -299,6 +299,29 @@ describe("ClaudeJsonSync", () => {
       expect(servers.safe).toBeDefined();
       expect(servers.malicious).toBeUndefined();
     });
+
+    it("rejects MCP server args with shell metacharacters", async () => {
+      const remote = {
+        mcpServers: {
+          safe: { command: "npx", args: ["mcp-github"] },
+          argsInjection: { command: "npx", args: ["; rm -rf /"] },
+        },
+      };
+      await writeFile(join(homeDir, ".claude.json"), "{}");
+      await writeFile(join(storeDir, "claude-json-sync.json"), JSON.stringify(remote));
+
+      const sync = new ClaudeJsonSync();
+      const result = sync.merge({
+        claudeJsonPath: join(homeDir, ".claude.json"),
+        storePath: join(storeDir, "claude-json-sync.json"),
+        homeDir,
+        syncMcpServers: true,
+      });
+
+      const servers = result.mcpServers as Record<string, unknown>;
+      expect(servers.safe).toBeDefined();
+      expect(servers.argsInjection).toBeUndefined();
+    });
   });
 
   describe("path canonicalization", () => {

@@ -80,14 +80,25 @@ export class ClaudeJsonSync {
       >;
 
       // Validate remote MCP server entries before merging
+      const shellMetacharPattern = /[;&|`$]/;
       const validatedServers: Record<string, unknown> = {};
       for (const [name, cfg] of Object.entries(remoteServers)) {
         const server = cfg as Record<string, unknown>;
-        if (typeof server.command === "string" && /[;&|`$]/.test(server.command)) {
+        if (typeof server.command === "string" && shellMetacharPattern.test(server.command)) {
           output.warn(
             `Skipping remote MCP server "${name}": command contains shell metacharacters`,
           );
           continue;
+        }
+        // Also validate args array entries for shell metacharacters
+        if (Array.isArray(server.args)) {
+          const unsafeArg = (server.args as unknown[]).find(
+            (arg) => typeof arg === "string" && shellMetacharPattern.test(arg),
+          );
+          if (unsafeArg) {
+            output.warn(`Skipping remote MCP server "${name}": args contain shell metacharacters`);
+            continue;
+          }
         }
         validatedServers[name] = server;
       }
