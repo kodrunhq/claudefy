@@ -136,3 +136,15 @@ If a path doesn't match any link and isn't under `~/.claude/`, it is left unchan
 - Paths not covered by links will contain the original machine's absolute path.
 - The config will still work on the original machine but may break on others.
 - For full portability, create links for all projects you reference in Claude Code settings.
+
+## Known Limitations
+
+### Embedded paths in session transcripts
+
+Path normalization applies to:
+- Top-level JSONL fields (`project`, `cwd`) in session transcript lines
+- Directory names in `projects/` (e.g., `-Users-user-myproject`)
+
+Paths embedded within `tool_use`/`tool_result` message content inside session transcripts are **not** normalized. These include file paths in `Read`, `Write`, `Edit`, and other tool inputs/outputs. On a different machine, these embedded paths reference the original machine's filesystem locations.
+
+This is intentional — these are historical references and do not affect Claude Code functionality on the receiving machine. Deep path normalization of message content would be complex and error-prone, as paths appear in many formats and contexts within tool results.

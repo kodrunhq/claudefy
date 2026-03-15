@@ -74,25 +74,25 @@ describe("Merger", () => {
       ]);
     });
 
-    it("falls back to remote-wins for primitive arrays", () => {
+    it("unions primitive arrays preserving local-only entries", () => {
       const local = { tags: ["a", "b", "c"] };
       const remote = { tags: ["x", "y"] };
       const result = merger.deepMergeJson(local, remote);
-      expect(result.tags).toEqual(["x", "y"]);
+      expect(result.tags).toEqual(["x", "y", "a", "b", "c"]);
     });
 
-    it("falls back to remote-wins for arrays of objects without identifiable key", () => {
+    it("preserves local entries for keyless object arrays via JSON dedup", () => {
       const local = { items: [{ value: 1 }, { value: 2 }] };
       const remote = { items: [{ value: 3 }] };
       const result = merger.deepMergeJson(local, remote);
-      expect(result.items).toEqual([{ value: 3 }]);
+      expect(result.items).toEqual([{ value: 3 }, { value: 1 }, { value: 2 }]);
     });
 
-    it("handles empty arrays", () => {
+    it("preserves local entries when remote array is empty", () => {
       const local = { items: [{ name: "a", value: 1 }] };
       const remote = { items: [] };
       const result = merger.deepMergeJson(local, remote);
-      expect(result.items).toEqual([]);
+      expect(result.items).toEqual([{ name: "a", value: 1 }]);
     });
   });
 });

@@ -72,6 +72,6 @@ describe("DoctorCommand", () => {
     const encCheck = checks.find((c) => c.name === "encryption");
     expect(encCheck).toBeDefined();
     expect(encCheck!.status).toBe("pass");
-    expect(encCheck!.detail).toContain("enabled");
+    expect(encCheck!.detail).toContain("Enabled");
   });
 });

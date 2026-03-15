@@ -21,7 +21,7 @@ export class DoctorCommand {
     const checks: DoctorCheck[] = [];
 
     checks.push(await this.checkBinary("git", "git --version"));
-    checks.push(await this.checkBinary("git-lfs", "git lfs version"));
+    checks.push(await this.checkBinary("git-lfs", "git lfs version", "warn"));
     checks.push(this.checkInitialized());
 
     const configManager = new ConfigManager(this.homeDir);
@@ -34,13 +34,17 @@ export class DoctorCommand {
     return checks;
   }
 
-  private async checkBinary(name: string, command: string): Promise<DoctorCheck> {
+  private async checkBinary(
+    name: string,
+    command: string,
+    failSeverity: "fail" | "warn" = "fail",
+  ): Promise<DoctorCheck> {
     const [cmd, ...args] = command.split(" ");
     try {
       const { stdout } = await execFileAsync(cmd, args);
       return { name, status: "pass", detail: stdout.trim().split("\n")[0] };
     } catch {
-      return { name, status: "fail", detail: `${name} not found in PATH` };
+      return { name, status: failSeverity, detail: `${name} not found in PATH` };
     }
   }
 
@@ -56,14 +60,20 @@ export class DoctorCommand {
     };
   }
 
-  private checkEncryption(config: { encryption: { enabled: boolean } }): DoctorCheck {
+  private checkEncryption(config: {
+    encryption: { enabled: boolean; mode?: "reactive" | "full" };
+  }): DoctorCheck {
     if (config.encryption.enabled) {
-      return { name: "encryption", status: "pass", detail: "encryption enabled" };
+      return {
+        name: "encryption",
+        status: "pass",
+        detail: `Enabled (mode: ${config.encryption.mode ?? "reactive"})`,
+      };
     }
     return {
       name: "encryption",
       status: "warn",
-      detail: "encryption disabled — files pushed in cleartext",
+      detail: "Disabled — files stored in plaintext",
     };
   }
 

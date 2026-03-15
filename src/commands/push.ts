@@ -10,8 +10,10 @@ import { PathMapper } from "../path-mapper/path-mapper.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { Encryptor } from "../encryptor/encryptor.js";
 import { SecretScanner } from "../secret-scanner/scanner.js";
+import { ClaudeJsonSync } from "../claude-json-sync/claude-json-sync.js";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
+import { withLock } from "../lockfile/lockfile.js";
 
 export interface PushOptions {
   quiet: boolean;
@@ -32,154 +34,203 @@ export class PushCommand {
   }
 
   async execute(options: PushOptions): Promise<void> {
-    const config = await this.configManager.load();
-    const syncFilterConfig = await this.configManager.getSyncFilter();
-    const syncFilter = new SyncFilter(syncFilterConfig);
+    const claudefyDir = join(this.homeDir, ".claudefy");
+    await withLock("push", !!options.quiet, claudefyDir, async () => {
+      const config = await this.configManager.load();
 
-    // 1. Classify ~/.claude contents
-    if (!existsSync(this.claudeDir)) {
-      throw new Error(`No ${this.claudeDir} directory found. Nothing to push.`);
-    }
-    const classification = await syncFilter.classify(this.claudeDir);
-
-    const willEncrypt = config.encryption.enabled && !options.skipEncryption;
-    if (!options.quiet) {
-      const unknownLabel = willEncrypt ? "unknown (encrypted)" : "unknown";
-      output.info(
-        `Syncing: ${classification.allowlist.length} allowed, ` +
-          `${classification.unknown.length} ${unknownLabel}, ` +
-          `${classification.denylist.length} denied`,
-      );
-    }
-
-    // 2. Initialize git adapter + per-machine branch
-    const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
-    await gitAdapter.initStore(config.backend.url);
-    await gitAdapter.ensureMachineBranch(config.machineId);
-    try {
-      await gitAdapter.pullAndMergeMain();
-    } catch {
-      if (!options.quiet) {
-        output.info(
-          "Warning: Unable to pull latest changes from remote; proceeding with local state only.",
+      if (options.skipEncryption && config.encryption.enabled && !options.quiet) {
+        output.warn(
+          "Encryption is enabled in config but --skip-encryption flag is set.\n" +
+            "  Files will be pushed/pulled WITHOUT encryption. Use only for testing.",
         );
       }
-    }
 
-    const storePath = gitAdapter.getStorePath();
-    const configDir = join(storePath, STORE_CONFIG_DIR);
-    const unknownDir = join(storePath, STORE_UNKNOWN_DIR);
+      const syncFilterConfig = await this.configManager.getSyncFilter();
+      const syncFilter = new SyncFilter(syncFilterConfig);
 
-    // 3. Build path mapper
-    const links = await this.configManager.getLinks();
-    const pathMapper = new PathMapper(links);
+      // 1. Classify ~/.claude contents
+      if (!existsSync(this.claudeDir)) {
+        throw new Error(`No ${this.claudeDir} directory found. Nothing to push.`);
+      }
+      const classification = await syncFilter.classify(this.claudeDir);
 
-    // 4. Hash existing store files
-    const configHashes = await this.collectStoreHashes(configDir);
-    const unknownHashes = await this.collectStoreHashes(unknownDir);
+      const willEncrypt = config.encryption.enabled && !options.skipEncryption;
+      if (!options.quiet) {
+        const unknownLabel = willEncrypt ? "unknown (encrypted)" : "unknown";
+        output.info(
+          `Syncing: ${classification.allowlist.length} allowed, ` +
+            `${classification.unknown.length} ${unknownLabel}, ` +
+            `${classification.denylist.length} denied`,
+        );
+      }
 
-    // 5. Incremental sync — write only changed files
-    const changedFiles: string[] = [];
+      // 2. Initialize git adapter + per-machine branch
+      const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
+      await gitAdapter.initStore(config.backend.url);
+      await gitAdapter.ensureMachineBranch(config.machineId);
+      try {
+        await gitAdapter.pullAndMergeMain();
+      } catch {
+        if (!options.quiet) {
+          output.info(
+            "Warning: Unable to pull latest changes from remote; proceeding with local state only.",
+          );
+        }
+      }
 
-    await mkdir(configDir, { recursive: true });
-    await mkdir(unknownDir, { recursive: true });
+      const storePath = gitAdapter.getStorePath();
+      const configDir = join(storePath, STORE_CONFIG_DIR);
+      const unknownDir = join(storePath, STORE_UNKNOWN_DIR);
 
-    // Track which top-level items are being synced for deletion detection
-    const syncedConfigItems: string[] = [];
-    const syncedUnknownItems: string[] = [];
+      // 3. Build path mapper
+      const links = await this.configManager.getLinks();
+      const pathMapper = new PathMapper(links);
 
-    for (const item of classification.allowlist) {
-      syncedConfigItems.push(item.name);
-      const src = join(this.claudeDir, item.name);
-      await this.syncItem(src, configDir, item.name, configHashes, changedFiles, pathMapper);
-    }
+      // 4. Hash existing store files
+      const configHashes = await this.collectStoreHashes(configDir);
+      const unknownHashes = await this.collectStoreHashes(unknownDir);
 
-    for (const item of classification.unknown) {
-      syncedUnknownItems.push(item.name);
-      const src = join(this.claudeDir, item.name);
-      await this.syncItem(src, unknownDir, item.name, unknownHashes, changedFiles, null);
-    }
+      // 5. Incremental sync — write only changed files
+      const changedFiles: string[] = [];
 
-    // 6. Detect deletions — remove store entries not present in source
-    await this.removeDeleted(configDir, syncedConfigItems);
-    await this.removeDeleted(unknownDir, syncedUnknownItems);
+      await mkdir(configDir, { recursive: true });
+      await mkdir(unknownDir, { recursive: true });
 
-    // 7. Scan for secrets and encrypt files that contain them
-    const filesToEncrypt = new Set<string>();
+      // Track which top-level items are being synced for deletion detection
+      const syncedConfigItems: string[] = [];
+      const syncedUnknownItems: string[] = [];
 
-    if (!options.skipSecretScan && changedFiles.length > 0) {
-      const scanner = new SecretScanner();
-      const findings = await scanner.scanFiles(changedFiles);
+      for (const item of classification.allowlist) {
+        syncedConfigItems.push(item.name);
+        const src = join(this.claudeDir, item.name);
+        await this.syncItem(src, configDir, item.name, configHashes, changedFiles, pathMapper);
+      }
 
-      if (findings.length > 0) {
-        if (!config.encryption.enabled || options.skipEncryption) {
-          const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+      for (const item of classification.unknown) {
+        syncedUnknownItems.push(item.name);
+        const src = join(this.claudeDir, item.name);
+        await this.syncItem(src, unknownDir, item.name, unknownHashes, changedFiles, null);
+      }
+
+      // 6b. Extract syncable fields from ~/.claude.json (before deletion detection)
+      if (config.claudeJson?.sync !== false) {
+        const claudeJsonPath = join(this.homeDir, ".claude.json");
+        const claudeJsonStorePath = join(configDir, "claude-json-sync.json");
+        if (existsSync(claudeJsonPath)) {
+          const claudeJsonSync = new ClaudeJsonSync();
+          const extracted = claudeJsonSync.extract({
+            claudeJsonPath,
+            storePath: claudeJsonStorePath,
+            homeDir: this.homeDir,
+            syncMcpServers: config.claudeJson?.syncMcpServers ?? false,
+          });
+          if (Object.keys(extracted).length > 0) {
+            const newContent = JSON.stringify(extracted, null, 2);
+            // Only write if content changed — avoids unnecessary scanning/encryption
+            const existingContent = existsSync(claudeJsonStorePath)
+              ? await readFile(claudeJsonStorePath, "utf-8").catch(() => "")
+              : "";
+            if (newContent !== existingContent) {
+              await writeFile(claudeJsonStorePath, newContent);
+              changedFiles.push(claudeJsonStorePath);
+            }
+          }
+        }
+        // Protect from deletion detection — not a ~/.claude item but lives in configDir
+        syncedConfigItems.push("claude-json-sync.json");
+      }
+
+      // 6c. Detect deletions — remove store entries not present in source
+      await this.removeDeleted(configDir, syncedConfigItems);
+      await this.removeDeleted(unknownDir, syncedUnknownItems);
+
+      // 7. Scan for secrets and encrypt files that contain them
+      const filesToEncrypt = new Set<string>();
+
+      if (!options.skipSecretScan && changedFiles.length > 0) {
+        const scanner = new SecretScanner(config.secretScanner?.customPatterns);
+        const findings = await scanner.scanFiles(changedFiles);
+
+        if (findings.length > 0) {
+          if (!config.encryption.enabled || options.skipEncryption) {
+            const details = findings.map((f) => `  ${f.file}:${f.line} [${f.pattern}]`).join("\n");
+            throw new Error(
+              `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nEnable encryption or use --skip-secret-scan to bypass scanning.`,
+            );
+          }
+
+          for (const f of findings) {
+            filesToEncrypt.add(f.file);
+          }
+        }
+      }
+
+      // 7b. Encrypt files based on encryption mode
+      if (config.encryption.enabled && !options.skipEncryption) {
+        const mode = config.encryption.mode ?? "reactive";
+        if (mode === "full") {
+          // Full mode: encrypt ALL files
+          await this.collectFilesRecursive(configDir, filesToEncrypt);
+          await this.collectFilesRecursive(unknownDir, filesToEncrypt);
+        } else {
+          // Reactive mode: only encrypt unknown-tier files
+          await this.collectFilesRecursive(unknownDir, filesToEncrypt);
+        }
+      }
+
+      // 7c. Perform encryption on all files that need it
+      if (filesToEncrypt.size > 0) {
+        if (!options.passphrase) {
           throw new Error(
-            `Secret scan detected ${findings.length} potential secret(s):\n${details}\n\nEnable encryption or use --skip-secret-scan to bypass scanning.`,
+            "Encryption is required but no passphrase found. Set CLAUDEFY_PASSPHRASE or ensure your passphrase is stored in your OS keychain (configured during 'claudefy init' or 'claudefy join').",
           );
         }
 
-        for (const f of findings) {
-          filesToEncrypt.add(f.file);
+        const encryptor = new Encryptor(options.passphrase, config.backend.url);
+        for (const filePath of filesToEncrypt) {
+          if (existsSync(filePath) && !filePath.endsWith(".age")) {
+            const ad = (
+              filePath.startsWith(configDir)
+                ? relative(configDir, filePath)
+                : relative(unknownDir, filePath)
+            )
+              .split(sep)
+              .join("/");
+            await encryptor.encryptFile(filePath, filePath + ".age", ad);
+            await rm(filePath);
+          }
+        }
+
+        if (!options.quiet) {
+          output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
         }
       }
-    }
 
-    // 7b. Always encrypt unknown-tier files when encryption is enabled
-    if (config.encryption.enabled && !options.skipEncryption) {
-      await this.collectFilesRecursive(unknownDir, filesToEncrypt);
-    }
+      // 8. Conditional manifest update
+      const hasRealChanges = !(await gitAdapter.isClean());
+      const registry = new MachineRegistry(join(storePath, STORE_MANIFEST_FILE));
+      await registry.conditionalRegister(config.machineId, hostname(), platform(), hasRealChanges);
 
-    // 7c. Perform encryption on all files that need it
-    if (filesToEncrypt.size > 0) {
-      if (!options.passphrase) {
-        throw new Error(
-          "Encryption is required but no passphrase found. Set CLAUDEFY_PASSPHRASE or ensure your passphrase is stored in your OS keychain (configured during 'claudefy init' or 'claudefy join').",
-        );
-      }
-
-      const encryptor = new Encryptor(options.passphrase, config.backend.url);
-      for (const filePath of filesToEncrypt) {
-        if (existsSync(filePath) && !filePath.endsWith(".age")) {
-          const ad = (
-            filePath.startsWith(configDir)
-              ? relative(configDir, filePath)
-              : relative(unknownDir, filePath)
-          )
-            .split(sep)
-            .join("/");
-          await encryptor.encryptFile(filePath, filePath + ".age", ad);
-          await rm(filePath);
-        }
-      }
+      // 9. Commit and push with branch support
+      const commitResult = await gitAdapter.commitAndPush(
+        `sync: push from ${config.machineId}`,
+        config.machineId,
+      );
 
       if (!options.quiet) {
-        output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
+        if (commitResult.committed && !commitResult.pushed) {
+          output.warn(
+            "Changes were committed locally, but pushing to the remote failed. Retry with 'claudefy push'.",
+          );
+        }
+        if (commitResult.pushed && !commitResult.mergedToMain) {
+          output.warn(
+            "Unable to merge machine branch into main. You may need to resolve conflicts.",
+          );
+        }
+        output.success("Push complete.");
       }
-    }
-
-    // 8. Conditional manifest update
-    const hasRealChanges = !(await gitAdapter.isClean());
-    const registry = new MachineRegistry(join(storePath, STORE_MANIFEST_FILE));
-    await registry.conditionalRegister(config.machineId, hostname(), platform(), hasRealChanges);
-
-    // 9. Commit and push with branch support
-    const commitResult = await gitAdapter.commitAndPush(
-      `sync: push from ${config.machineId}`,
-      config.machineId,
-    );
-
-    if (!options.quiet) {
-      if (commitResult.committed && !commitResult.pushed) {
-        output.warn(
-          "Changes were committed locally, but pushing to the remote failed. Retry with 'claudefy push'.",
-        );
-      }
-      if (commitResult.pushed && !commitResult.mergedToMain) {
-        output.warn("Unable to merge machine branch into main. You may need to resolve conflicts.");
-      }
-      output.success("Push complete.");
-    }
+    });
   }
 
   private async hashFile(filePath: string): Promise<string> {

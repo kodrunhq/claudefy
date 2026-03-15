@@ -158,6 +158,54 @@ describe("SecretScanner", () => {
     expect(results.length).toBe(0);
   });
 
+  it("does not match Twilio-like pattern inside a longer hex string", async () => {
+    // Build string dynamically to avoid push protection false positives
+    const prefix = "SK";
+    const hex32 = "1234567890abcdef".repeat(2);
+    const content = `hash: abcdef${prefix}${hex32}0123`;
+    await writeFile(join(tempDir, "test.txt"), content);
+    const scanner = new SecretScanner();
+    const findings = await scanner.scanFiles([join(tempDir, "test.txt")]);
+    expect(findings).toHaveLength(0);
+  });
+
+  it("matches Twilio key with uppercase hex", async () => {
+    // Build string dynamically to avoid push protection false positives
+    const prefix = "SK";
+    const hex32 = "1234567890ABCDEF".repeat(2);
+    const content = `TWILIO_SID=${prefix}${hex32}`;
+    await writeFile(join(tempDir, "test.txt"), content);
+    const scanner = new SecretScanner();
+    const findings = await scanner.scanFiles([join(tempDir, "test.txt")]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].pattern).toBe("Twilio API Key");
+  });
+
+  it("detects custom patterns", async () => {
+    const content = "token: MYCO_abcdefghijklmnopqrstuvwxyz012345";
+    await writeFile(join(tempDir, "test.txt"), content);
+    const scanner = new SecretScanner([{ name: "Internal Token", regex: "MYCO_[A-Za-z0-9]{32}" }]);
+    const findings = await scanner.scanFiles([join(tempDir, "test.txt")]);
+    expect(findings).toHaveLength(1);
+    expect(findings[0].pattern).toBe("Internal Token");
+  });
+
+  it("supports custom pattern flags", async () => {
+    const content = "SECRET_KEY=abc123";
+    await writeFile(join(tempDir, "test.txt"), content);
+    const scanner = new SecretScanner([
+      { name: "Case Insensitive", regex: "secret_key", flags: "i" },
+    ]);
+    const findings = await scanner.scanFiles([join(tempDir, "test.txt")]);
+    expect(findings).toHaveLength(1);
+  });
+
+  it("throws on invalid custom regex", () => {
+    expect(() => new SecretScanner([{ name: "Bad", regex: "[invalid" }])).toThrow(
+      /Invalid regex in custom pattern "Bad"/,
+    );
+  });
+
   it("scans multiple files", async () => {
     const clean = join(tempDir, "clean.md");
     const dirty = join(tempDir, "dirty.json");

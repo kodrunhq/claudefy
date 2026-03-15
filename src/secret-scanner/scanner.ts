@@ -7,7 +7,18 @@ export interface SecretFinding {
   snippet: string;
 }
 
-const SECRET_PATTERNS: { name: string; regex: RegExp }[] = [
+export interface CustomPattern {
+  name: string;
+  regex: string;
+  flags?: string;
+}
+
+interface SecretPattern {
+  name: string;
+  regex: RegExp;
+}
+
+const SECRET_PATTERNS: SecretPattern[] = [
   { name: "Anthropic API Key", regex: /sk-ant-[a-zA-Z0-9_-]{20,}/ },
   { name: "OpenAI API Key", regex: /sk-(?!ant-)[a-zA-Z0-9]{20,}/ },
   { name: "AWS Access Key", regex: /AKIA[0-9A-Z]{16}/ },
@@ -24,11 +35,26 @@ const SECRET_PATTERNS: { name: string; regex: RegExp }[] = [
   { name: "Stripe Live Key", regex: /sk_live_[0-9a-zA-Z]{24,}/ },
   { name: "Stripe Test Key", regex: /sk_test_[0-9a-zA-Z]{24,}/ },
   { name: "Azure Connection String", regex: /AccountKey=[A-Za-z0-9+/=]{44,}/ },
-  { name: "Twilio API Key", regex: /SK[0-9a-fA-F]{32}/ },
-  { name: "Datadog API Key", regex: /dd[a-z]{0,2}_[0-9a-zA-Z]{32,}/ },
+  { name: "Twilio API Key", regex: /\bSK[0-9a-fA-F]{32}\b/ },
+  { name: "Datadog API Key", regex: /\b(?:ddapi|ddog|dd)_[0-9a-zA-Z]{32,}\b/ },
 ];
 
 export class SecretScanner {
+  private readonly patterns: SecretPattern[];
+
+  constructor(customPatterns: CustomPattern[] = []) {
+    const custom = customPatterns.map((p) => {
+      try {
+        return { name: p.name, regex: new RegExp(p.regex, p.flags) };
+      } catch (e) {
+        throw new Error(`Invalid regex in custom pattern "${p.name}": ${(e as Error).message}`, {
+          cause: e,
+        });
+      }
+    });
+    this.patterns = [...SECRET_PATTERNS, ...custom];
+  }
+
   async scanFile(filePath: string): Promise<SecretFinding[]> {
     // Skip encrypted files — they're binary blobs, not plaintext secrets
     if (filePath.endsWith(".age")) return [];
@@ -42,7 +68,7 @@ export class SecretScanner {
     const lines = content.split("\n");
 
     for (let i = 0; i < lines.length; i++) {
-      for (const pattern of SECRET_PATTERNS) {
+      for (const pattern of this.patterns) {
         const match = pattern.regex.exec(lines[i]);
         if (match) {
           // Redact matched secret, showing only prefix and suffix
