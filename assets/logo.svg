@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#D97706"/>
+      <stop offset="100%" stop-color="#B45309"/>
+    </linearGradient>
+    <linearGradient id="arrow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FDE68A"/>
+      <stop offset="100%" stop-color="#FCD34D"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect x="10" y="10" width="180" height="180" rx="36" fill="url(#bg)"/>
+  <!-- Sync arrows (two curved arrows forming a cycle) -->
+  <g transform="translate(100,100)" fill="none" stroke="url(#arrow)" stroke-width="10" stroke-linecap="round">
+    <!-- Top-right arc -->
+    <path d="M -10,-45 A 45,45 0 0,1 45,10"/>
+    <!-- Arrow head top -->
+    <polygon fill="#FCD34D" stroke="none" points="45,10 30,-5 30,12" transform="rotate(15,45,10)"/>
+    <!-- Bottom-left arc -->
+    <path d="M 10,45 A 45,45 0 0,1 -45,-10"/>
+    <!-- Arrow head bottom -->
+    <polygon fill="#FCD34D" stroke="none" points="-45,-10 -30,5 -30,-12" transform="rotate(15,-45,-10)"/>
+  </g>
+  <!-- Lock icon in center -->
+  <g transform="translate(100,100)">
+    <rect x="-12" y="-4" width="24" height="18" rx="3" fill="#FDE68A"/>
+    <path d="M -7,-4 L -7,-11 A 7,7 0 0,1 7,-11 L 7,-4" fill="none" stroke="#FDE68A" stroke-width="4" stroke-linecap="round"/>
+    <circle cx="0" cy="6" r="3" fill="#B45309"/>
+  </g>
+</svg>
