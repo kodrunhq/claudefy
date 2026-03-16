@@ -67,10 +67,6 @@ claudefy diff     # preview what push/pull would change
 ## How It Works
 
 <p align="center">
-  <img src="assets/test.svg" alt="test" />
-</p>
-
-<p align="center">
   <img src="assets/architecture.svg" alt="claudefy architecture" width="720" />
 </p>
 
