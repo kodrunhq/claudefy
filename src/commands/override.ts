@@ -50,10 +50,14 @@ export class OverrideCommand {
       await gitAdapter.wipeAndPush(config.machineId);
 
       // 3. Run full push pipeline to repopulate store
+      // Skip secret scanning: override re-pushes ALL files (store was wiped so every
+      // file looks "changed"). Rescanning triggers false positives on conversation
+      // transcripts that already passed scanning on their original push.
       const pushCommand = new PushCommand(this.homeDir);
       await pushCommand.execute({
         quiet: options.quiet,
         skipEncryption: options.skipEncryption,
+        skipSecretScan: true,
         passphrase: options.passphrase,
       });
 

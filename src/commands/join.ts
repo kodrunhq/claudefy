@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { lstat, readdir } from "node:fs/promises";
+import { lstat, readdir, writeFile } from "node:fs/promises";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PullCommand } from "./pull.js";
@@ -9,7 +9,12 @@ import { hostname, platform } from "node:os";
 import { output } from "../output.js";
 import { promptExistingPassphrase } from "../encryptor/passphrase.js";
 import { withLock } from "../lockfile/lockfile.js";
-import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
+import {
+  STORE_CONFIG_DIR,
+  STORE_UNKNOWN_DIR,
+  STORE_MANIFEST_FILE,
+  MACHINE_ID_FILE,
+} from "../config/defaults.js";
 
 export interface JoinOptions {
   backend: string;
@@ -35,16 +40,34 @@ export class JoinCommand {
         throw new Error("claudefy is already initialized. Use 'claudefy pull' to sync.");
       }
 
-      // 1. Initialize config
+      // 1. Initialize config (generates a fresh machineId)
       const config = await configManager.initialize(options.backend);
+
+      // 2. Initialize git store and check for existing machine with same hostname
+      const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
+      await gitAdapter.initStore(options.backend);
+
+      // Reuse machine ID if this hostname was previously registered (e.g. after
+      // deleting ~/.claudefy and rejoining). This keeps the same per-machine
+      // branch and avoids orphaned entries in the manifest.
+      const remoteRegistry = new MachineRegistry(
+        join(gitAdapter.getStorePath(), STORE_MANIFEST_FILE),
+      );
+      const existingMachines = await remoteRegistry.list();
+      const localHostname = hostname().toLowerCase();
+      const previousMachine = existingMachines.find(
+        (m) => m.hostname.toLowerCase() === localHostname,
+      );
+      if (previousMachine) {
+        config.machineId = previousMachine.machineId;
+        await configManager.set("machineId", config.machineId);
+        await writeFile(join(claudefyDir, MACHINE_ID_FILE), config.machineId);
+      }
 
       if (!options.quiet) {
         output.info(`Joined sync with machine ID: ${config.machineId}`);
       }
 
-      // 2. Initialize git store and pull
-      const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
-      await gitAdapter.initStore(options.backend);
       await gitAdapter.ensureMachineBranch(config.machineId);
       await gitAdapter.ensureGitattributes();
 
