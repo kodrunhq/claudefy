@@ -66,9 +66,35 @@ claudefy diff     # preview what push/pull would change
 
 ## How It Works
 
-<p align="center">
-  <img src="assets/architecture.svg" alt="claudefy architecture" width="720" />
-</p>
+```mermaid
+graph TD
+    repo["<b>Private Git Repository</b><br/><i>encrypted store</i>"]
+
+    repo --- A
+    repo --- B
+    repo --- C
+
+    A["<b>Machine A</b><br/>branch: machines/a<br/><code>~/.claude</code>"]
+    B["<b>Machine B</b><br/>branch: machines/b<br/><code>~/.claude</code>"]
+    C["<b>Machine C</b><br/>branch: machines/c<br/><code>~/.claude</code>"]
+
+    subgraph push ["PUSH pipeline"]
+        direction LR
+        p1["~/.claude"] --> p2["Filter"] --> p3["PathMap"] --> p4["Scan"] --> p5["Encrypt"] --> p6["Git push"]
+    end
+
+    subgraph pull ["PULL pipeline"]
+        direction LR
+        q1["Git pull"] --> q2["Decrypt"] --> q3["Remap"] --> q4["Merge"] --> q5["Strip hooks"]
+    end
+
+    style repo fill:#7C3AED,stroke:#6D28D9,color:#fff
+    style A fill:#1E293B,stroke:#334155,color:#fff
+    style B fill:#1E293B,stroke:#334155,color:#fff
+    style C fill:#1E293B,stroke:#334155,color:#fff
+    style push fill:#0F172A,stroke:#1E293B,color:#94A3B8
+    style pull fill:#0F172A,stroke:#1E293B,color:#94A3B8
+```
 
 Each machine gets its own git branch (`machines/<id>`). Push merges into `main`; pull merges `main` back into the machine branch. No conflicts, no data loss.
 
