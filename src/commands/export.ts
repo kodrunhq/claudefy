@@ -44,7 +44,14 @@ export class ExportCommand {
     }
 
     try {
-      await execFileAsync("tar", ["-czf", options.output, "-C", this.claudeDir, ...itemsToExport]);
+      await execFileAsync("tar", [
+        "-czf",
+        options.output,
+        "-C",
+        this.claudeDir,
+        "--",
+        ...itemsToExport,
+      ]);
     } catch (err) {
       throw new Error(`Failed to create export archive: ${(err as Error).message}`, { cause: err });
     }

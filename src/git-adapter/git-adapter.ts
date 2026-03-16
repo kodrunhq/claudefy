@@ -235,7 +235,10 @@ export class GitAdapter {
   }
 
   async ensureGitattributes(): Promise<void> {
-    await writeFile(join(this.storePath, ".gitattributes"), LFS_GITATTRIBUTES);
+    const path = join(this.storePath, ".gitattributes");
+    if (!existsSync(path)) {
+      await writeFile(path, LFS_GITATTRIBUTES);
+    }
   }
 
   getStorePath(): string {

@@ -88,7 +88,10 @@ export class PullCommand {
           const { SyncFilter } = await import("../sync-filter/sync-filter.js");
           const syncFilter = new SyncFilter(syncFilterConfig);
           const classification = await syncFilter.classify(this.claudeDir);
-          for (const item of classification.allowlist) {
+          const filteredAllowlist = options.only
+            ? classification.allowlist.filter((i) => i.name === options.only)
+            : classification.allowlist;
+          for (const item of filteredAllowlist) {
             const src = join(this.claudeDir, item.name);
             if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
           }

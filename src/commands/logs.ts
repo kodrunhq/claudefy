@@ -26,14 +26,16 @@ export class LogsCommand {
     const log = await git.log({ maxCount: options.count ?? 10 });
 
     if (log.all.length === 0) {
-      output.info("No sync history found.");
+      if (!options.quiet) output.info("No sync history found.");
       return;
     }
 
-    output.heading("Recent sync operations");
-    for (const entry of log.all) {
-      const date = new Date(entry.date).toISOString().replace("T", " ").slice(0, 16);
-      output.info(`${date}  ${entry.message}`);
+    if (!options.quiet) {
+      output.heading("Recent sync operations");
+      for (const entry of log.all) {
+        const date = new Date(entry.date).toISOString().replace("T", " ").slice(0, 16);
+        output.info(`${date}  ${entry.message}`);
+      }
     }
   }
 }

@@ -289,11 +289,12 @@ program
   .command("logs")
   .description("Show recent sync operations")
   .option("-n, --count <number>", "Number of entries to show", "10")
-  .action(async (cmdOpts) => {
+  .action(async function (this: Command, cmdOpts) {
     try {
+      const global = await getGlobalOpts(this);
       const { LogsCommand } = await import("./commands/logs.js");
       const cmd = new LogsCommand(homeDir);
-      await cmd.execute({ count: parseInt(cmdOpts.count, 10) });
+      await cmd.execute({ ...global, count: parseInt(cmdOpts.count, 10) });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);

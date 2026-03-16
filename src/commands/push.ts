@@ -104,28 +104,47 @@ export class PushCommand {
       if (options.dryRun) {
         const { computeDiff } = await import("../diff-utils/diff-utils.js");
         const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
-        const tmpLocal = join(this.homeDir, ".claudefy", ".dryrun-tmp");
-        if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
-        await mkTmp(tmpLocal, { recursive: true });
+        const tmpLocalConfig = join(this.homeDir, ".claudefy", ".dryrun-config-tmp");
+        const tmpLocalUnknown = join(this.homeDir, ".claudefy", ".dryrun-unknown-tmp");
+        if (existsSync(tmpLocalConfig))
+          await rmTmp(tmpLocalConfig, { recursive: true, force: true });
+        if (existsSync(tmpLocalUnknown))
+          await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
+        await mkTmp(tmpLocalConfig, { recursive: true });
+        await mkTmp(tmpLocalUnknown, { recursive: true });
         try {
           for (const item of classification.allowlist) {
             const src = join(this.claudeDir, item.name);
-            if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
+            if (existsSync(src))
+              await cp(src, join(tmpLocalConfig, item.name), { recursive: true });
           }
-          const diff = await computeDiff(tmpLocal, configDir);
-          if (!diff.hasChanges) {
+          for (const item of classification.unknown) {
+            const src = join(this.claudeDir, item.name);
+            if (existsSync(src))
+              await cp(src, join(tmpLocalUnknown, item.name), { recursive: true });
+          }
+          const configDiff = await computeDiff(tmpLocalConfig, configDir);
+          const unknownDiff = await computeDiff(tmpLocalUnknown, unknownDir);
+          const hasChanges = configDiff.hasChanges || unknownDiff.hasChanges;
+          if (!hasChanges) {
             if (!options.quiet) output.info("Dry run: no push changes detected.");
           } else {
             if (!options.quiet) {
               output.heading("Dry run — push would change:");
-              for (const f of diff.added) output.success(`  Added:    ${f}`);
-              for (const f of diff.modified) output.warn(`  Modified: ${f}`);
-              for (const f of diff.deleted) output.error(`  Deleted:  ${f}`);
+              const allAdded = [...configDiff.added, ...unknownDiff.added];
+              const allModified = [...configDiff.modified, ...unknownDiff.modified];
+              const allDeleted = [...configDiff.deleted, ...unknownDiff.deleted];
+              for (const f of allAdded) output.success(`  Added:    ${f}`);
+              for (const f of allModified) output.warn(`  Modified: ${f}`);
+              for (const f of allDeleted) output.error(`  Deleted:  ${f}`);
             }
             process.exitCode = 1;
           }
         } finally {
-          if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
+          if (existsSync(tmpLocalConfig))
+            await rmTmp(tmpLocalConfig, { recursive: true, force: true });
+          if (existsSync(tmpLocalUnknown))
+            await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
         }
         return;
       }

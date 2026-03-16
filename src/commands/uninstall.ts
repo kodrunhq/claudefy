@@ -22,14 +22,15 @@ export class UninstallCommand {
     const claudefyDir = join(this.homeDir, ".claudefy");
 
     if (!existsSync(claudefyDir)) {
-      output.info("claudefy is not installed (no ~/.claudefy directory found).");
+      if (!options.quiet)
+        output.info("claudefy is not installed (no ~/.claudefy directory found).");
       return;
     }
 
     if (!options.confirm) {
       const confirmed = await this.promptConfirmation();
       if (!confirmed) {
-        output.info("Uninstall cancelled.");
+        if (!options.quiet) output.info("Uninstall cancelled.");
         return;
       }
     }

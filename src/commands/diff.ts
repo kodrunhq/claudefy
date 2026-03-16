@@ -105,8 +105,9 @@ export class DiffCommand {
   }
 
   /**
-   * Compute pull diff, handling .age files by treating them as their
-   * unencrypted counterpart name with a "changed (encrypted)" note.
+   * Compute pull diff, handling .age files by stripping the .age suffix
+   * and replacing their content with a placeholder so encrypted files
+   * can be compared by logical name against local unencrypted files.
    */
   private async computePullDiff(storeDir: string, localDir: string): Promise<DiffResult> {
     // Create a temp copy of storeDir with .age suffixes stripped from names

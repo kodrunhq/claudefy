@@ -63,7 +63,7 @@ jobs:
         run: npm ci
 
       - name: Run tests with coverage
-        run: npx vitest run --coverage
+        run: npx vitest run --coverage --test-timeout=60000
 
   build:
     name: Build

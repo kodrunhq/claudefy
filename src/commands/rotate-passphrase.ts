@@ -1,4 +1,4 @@
-import { readdir, rm } from "node:fs/promises";
+import { readdir, rename, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -81,11 +81,13 @@ export class RotatePassphraseCommand {
 
       for (const ageFile of ageFiles) {
         const plainFile = ageFile.replace(/\.age$/, "");
+        const tmpNewAge = ageFile + ".new";
         const ad = relative(storePath, plainFile).split(sep).join("/");
 
         await oldEncryptor.decryptFile(ageFile, plainFile, ad);
+        await newEncryptor.encryptFile(plainFile, tmpNewAge, ad);
         await rm(ageFile);
-        await newEncryptor.encryptFile(plainFile, ageFile, ad);
+        await rename(tmpNewAge, ageFile);
         await rm(plainFile);
         rotated++;
       }
@@ -121,6 +123,7 @@ export class RotatePassphraseCommand {
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === ".git") continue;
         results.push(...(await this.collectAgeFiles(fullPath)));
       } else if (entry.name.endsWith(".age")) {
         results.push(fullPath);
@@ -130,10 +133,12 @@ export class RotatePassphraseCommand {
   }
 
   private async promptPassword(question: string): Promise<string> {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    process.stdout.write(question);
+    const rl = createInterface({ input: process.stdin, terminal: false });
     return new Promise<string>((resolve) => {
-      rl.question(question, (answer) => {
+      rl.once("line", (answer) => {
         rl.close();
+        process.stdout.write("\n");
         resolve(answer);
       });
     });

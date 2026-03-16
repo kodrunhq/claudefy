@@ -21,6 +21,7 @@ async function collectFiles(dir: string, prefix = ""): Promise<Map<string, strin
   const entries = await readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const relPath = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isSymbolicLink()) continue; // Skip symlinks to avoid path traversal
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       const sub = await collectFiles(fullPath, relPath);
