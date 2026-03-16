@@ -38,6 +38,7 @@ export class GitAdapter {
   async initStore(remoteUrl: string): Promise<void> {
     if (existsSync(this.storePath)) {
       this.git = simpleGit(this.storePath);
+      await this.configureHttpBuffer(this.git);
       await this.configureCredentialHelper(this.git, remoteUrl);
       return;
     }
@@ -66,6 +67,7 @@ export class GitAdapter {
     }
 
     this.git = simpleGit(this.storePath);
+    await this.configureHttpBuffer(this.git);
     await this.configureCredentialHelper(this.git, remoteUrl);
 
     // If we cloned an empty repo, it may be on master with no commits — initialize properly
@@ -217,7 +219,7 @@ export class GitAdapter {
     const currentBranch = await this.getCurrentBranch();
     const entries = await readdir(this.storePath);
     for (const entry of entries) {
-      if (entry === ".git") continue;
+      if (entry === ".git" || entry === ".gitattributes") continue;
       await rm(join(this.storePath, entry), { recursive: true, force: true });
     }
     await this.writeOverrideMarker(machineId);
@@ -268,6 +270,14 @@ export class GitAdapter {
   private ensureInitialized(): void {
     if (!this.git) {
       throw new Error("GitAdapter not initialized. Call initStore() first.");
+    }
+  }
+
+  private async configureHttpBuffer(git: SimpleGit): Promise<void> {
+    try {
+      await git.addConfig("http.postBuffer", "524288000");
+    } catch {
+      // Best-effort — git will use default buffer if this fails
     }
   }
 
