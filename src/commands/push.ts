@@ -26,6 +26,10 @@ export interface PushOptions {
   force?: boolean;
 }
 
+// Subdirectories within allowlisted items that should not be synced.
+// These contain downloaded third-party content that can be re-fetched.
+const SYNC_SKIP_DIRS = new Set(["plugins/cache", "plugins/marketplaces"]);
+
 export class PushCommand {
   private homeDir: string;
   private claudeDir: string;
@@ -422,6 +426,9 @@ export class PushCommand {
     changedFiles: string[],
     pathMapper: PathMapper | null,
   ): Promise<void> {
+    // Skip non-syncable subdirectories (downloaded caches, re-fetchable content)
+    if (SYNC_SKIP_DIRS.has(itemName)) return;
+
     const destDir = join(destBaseDir, itemName);
     await mkdir(destDir, { recursive: true });
     const entries = await readdir(srcDir, { withFileTypes: true });
