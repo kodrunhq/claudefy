@@ -24,7 +24,7 @@ claudefy keeps your `~/.claude` directory — CLAUDE.md, MEMORY.md, commands, sk
 ## Why claudefy?
 
 - **One config, every machine.** Stop manually copying files between your laptop, desktop, and servers.
-- **Safe by design.** Credentials never leave your machine. Secrets are detected and encrypted before push. Remote hooks and MCP server commands are validated on pull to prevent injection.
+- **Safe by design.** Credentials never leave your machine. Secrets are detected and encrypted before push. Remote hooks are stripped on pull to prevent injection.
 - **Set it and forget it.** With auto-sync hooks, `pull` runs when Claude Code starts and `push` runs when it ends. No manual steps.
 - **Conflict-free.** Per-machine git branches prevent collisions. Deep merge resolves settings.json at the key level, preserving local permission rules.
 - **Preview before you sync.** `claudefy diff` shows exactly what would change. `--dry-run` on push/pull lets you verify before committing.
@@ -154,7 +154,7 @@ Set mode: `claudefy config set encryption.mode full`
 1. `CLAUDEFY_PASSPHRASE` environment variable (recommended)
 2. OS keychain (if configured)
 
-Interactive prompts only occur during `claudefy init` and `claudefy join` setup.
+Interactive prompts occur during `claudefy init`, `claudefy join`, `claudefy rotate-passphrase`, and `claudefy uninstall` (unless `--confirm` is passed).
 
 > See [docs/encryption.md](docs/encryption.md) for the full technical deep-dive.
 
