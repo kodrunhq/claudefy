@@ -54,7 +54,7 @@ export function isKeychainAvailable(): boolean {
   }
 }
 
-function prompt(question: string, hidden = false): Promise<string> {
+export function prompt(question: string, hidden = false): Promise<string> {
   return new Promise((resolve) => {
     const rl = createInterface({
       input: process.stdin,

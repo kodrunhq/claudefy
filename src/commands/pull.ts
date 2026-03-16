@@ -1,6 +1,7 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import chalk from "chalk";
 import { simpleGit } from "simple-git";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -102,9 +103,9 @@ export class PullCommand {
         } else {
           if (!options.quiet) {
             output.heading("Dry run — pull would change:");
-            for (const f of diff.added) output.success(`  Added:    ${f}`);
-            for (const f of diff.modified) output.warn(`  Modified: ${f}`);
-            for (const f of diff.deleted) output.error(`  Deleted:  ${f}`);
+            for (const f of diff.added) console.log(chalk.green(`  Added:    ${f}`));
+            for (const f of diff.modified) console.log(chalk.yellow(`  Modified: ${f}`));
+            for (const f of diff.deleted) console.log(chalk.red(`  Deleted:  ${f}`));
           }
           process.exitCode = 1;
         }

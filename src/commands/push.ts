@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
+import chalk from "chalk";
 import { ConfigManager } from "../config/config-manager.js";
 import { SyncFilter } from "../sync-filter/sync-filter.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -134,9 +135,9 @@ export class PushCommand {
               const allAdded = [...configDiff.added, ...unknownDiff.added];
               const allModified = [...configDiff.modified, ...unknownDiff.modified];
               const allDeleted = [...configDiff.deleted, ...unknownDiff.deleted];
-              for (const f of allAdded) output.success(`  Added:    ${f}`);
-              for (const f of allModified) output.warn(`  Modified: ${f}`);
-              for (const f of allDeleted) output.error(`  Deleted:  ${f}`);
+              for (const f of allAdded) console.log(chalk.green(`  Added:    ${f}`));
+              for (const f of allModified) console.log(chalk.yellow(`  Modified: ${f}`));
+              for (const f of allDeleted) console.log(chalk.red(`  Deleted:  ${f}`));
             }
             process.exitCode = 1;
           }

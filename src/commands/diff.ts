@@ -6,6 +6,7 @@ import { SyncFilter } from "../sync-filter/sync-filter.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { computeDiff } from "../diff-utils/diff-utils.js";
 import type { DiffResult } from "../diff-utils/diff-utils.js";
+import chalk from "chalk";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR } from "../config/defaults.js";
 
@@ -155,13 +156,13 @@ export class DiffCommand {
 
       output.heading(`${label}:`);
       for (const file of diff.added) {
-        output.success(`  Added:    ${file}`);
+        console.log(chalk.green(`  Added:    ${file}`));
       }
       for (const file of diff.modified) {
-        output.warn(`  Modified: ${file}`);
+        console.log(chalk.yellow(`  Modified: ${file}`));
       }
       for (const file of diff.deleted) {
-        output.error(`  Deleted:  ${file}`);
+        console.log(chalk.red(`  Deleted:  ${file}`));
       }
     }
   }

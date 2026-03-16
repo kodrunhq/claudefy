@@ -1,11 +1,10 @@
 import { readdir, rename, rm } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { existsSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { Encryptor } from "../encryptor/encryptor.js";
-import { storePassphraseInKeychain } from "../encryptor/passphrase.js";
+import { prompt, storePassphraseInKeychain } from "../encryptor/passphrase.js";
 import { output } from "../output.js";
 import { withLock } from "../lockfile/lockfile.js";
 
@@ -32,20 +31,18 @@ export class RotatePassphraseCommand {
         throw new Error("Encryption is not enabled. Nothing to rotate.");
       }
 
-      const oldPass =
-        options.oldPassphrase ?? (await this.promptPassword("Enter current passphrase: "));
+      const oldPass = options.oldPassphrase ?? (await prompt("Enter current passphrase: ", true));
       if (!oldPass) {
         throw new Error("Old passphrase is required.");
       }
 
-      const newPass =
-        options.newPassphrase ?? (await this.promptPassword("Enter new passphrase: "));
+      const newPass = options.newPassphrase ?? (await prompt("Enter new passphrase: ", true));
       if (!newPass) {
         throw new Error("New passphrase is required.");
       }
 
       if (!options.newPassphrase) {
-        const confirm = await this.promptPassword("Confirm new passphrase: ");
+        const confirm = await prompt("Confirm new passphrase: ", true);
         if (newPass !== confirm) {
           throw new Error("Passphrases do not match.");
         }
@@ -84,12 +81,18 @@ export class RotatePassphraseCommand {
         const tmpNewAge = ageFile + ".new";
         const ad = relative(storePath, plainFile).split(sep).join("/");
 
-        await oldEncryptor.decryptFile(ageFile, plainFile, ad);
-        await newEncryptor.encryptFile(plainFile, tmpNewAge, ad);
-        await rm(ageFile);
-        await rename(tmpNewAge, ageFile);
-        await rm(plainFile);
-        rotated++;
+        try {
+          await oldEncryptor.decryptFile(ageFile, plainFile, ad);
+          await newEncryptor.encryptFile(plainFile, tmpNewAge, ad);
+          await rm(ageFile);
+          await rename(tmpNewAge, ageFile);
+          await rm(plainFile);
+          rotated++;
+        } finally {
+          // Clean up plaintext and temp files on error
+          if (existsSync(plainFile)) await rm(plainFile).catch(() => {});
+          if (existsSync(tmpNewAge)) await rm(tmpNewAge).catch(() => {});
+        }
       }
 
       // Update keychain if enabled
@@ -130,17 +133,5 @@ export class RotatePassphraseCommand {
       }
     }
     return results;
-  }
-
-  private async promptPassword(question: string): Promise<string> {
-    process.stdout.write(question);
-    const rl = createInterface({ input: process.stdin, terminal: false });
-    return new Promise<string>((resolve) => {
-      rl.once("line", (answer) => {
-        rl.close();
-        process.stdout.write("\n");
-        resolve(answer);
-      });
-    });
   }
 }

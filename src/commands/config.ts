@@ -62,9 +62,9 @@ export class ConfigCommand {
       }
     }
 
-    const parsed = this.parseValue(value);
-
     const schema = ConfigCommand.CONFIG_SCHEMA[key];
+    const parsed = this.parseValue(value, schema?.type);
+
     if (schema) {
       const actualType = typeof parsed;
       if (actualType !== schema.type && !(schema.type === "object" && Array.isArray(parsed))) {
@@ -80,8 +80,21 @@ export class ConfigCommand {
     await configManager.set(key, parsed);
   }
 
-  private parseValue(value: unknown): unknown {
+  private parseValue(value: unknown, schemaType?: string): unknown {
     if (typeof value !== "string") return value;
+
+    // If schema says string, don't coerce
+    if (schemaType === "string") return value;
+
+    // If schema says object, try JSON parsing
+    if (schemaType === "object") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        throw new Error(`Expected JSON for object value, got: ${value}`);
+      }
+    }
+
     if (value === "true") return true;
     if (value === "false") return false;
     const num = Number(value);

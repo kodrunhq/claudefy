@@ -39,7 +39,7 @@ export class ExportCommand {
     ];
 
     if (itemsToExport.length === 0) {
-      output.info("No files to export.");
+      if (!options.quiet) output.info("No files to export.");
       return;
     }
 
