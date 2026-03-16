@@ -294,7 +294,11 @@ program
       const global = await getGlobalOpts(this);
       const { LogsCommand } = await import("./commands/logs.js");
       const cmd = new LogsCommand(homeDir);
-      await cmd.execute({ ...global, count: parseInt(cmdOpts.count, 10) });
+      const count = parseInt(cmdOpts.count, 10);
+      if (!Number.isFinite(count) || count < 1) {
+        throw new Error(`Invalid count: "${cmdOpts.count}". Must be a positive number.`);
+      }
+      await cmd.execute({ ...global, count });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -309,13 +313,21 @@ program
   .option("--fish", "Output fish completion")
   .action((cmdOpts) => {
     const commands = program.commands.map((c) => c.name()).join(" ");
-    if (cmdOpts.zsh || cmdOpts.fish) {
+    const commandList = program.commands.map((c) => c.name());
+    if (cmdOpts.fish) {
+      const fishCompletions = commandList
+        .map((c) => `complete -c claudefy -n '__fish_use_subcommand' -a '${c}'`)
+        .join("\n");
       console.log(
-        `# claudefy completion\n# Add to your shell profile:\n# eval "$(claudefy completion --zsh)"\n\n_claudefy() {\n  local commands="${commands}"\n  _arguments '1: :($commands)'\n}\ncompdef _claudefy claudefy`,
+        `# claudefy fish completion\n# Save to ~/.config/fish/completions/claudefy.fish\n\n${fishCompletions}`,
+      );
+    } else if (cmdOpts.zsh) {
+      console.log(
+        `# claudefy zsh completion\n# Add to your .zshrc:\n# eval "$(claudefy completion --zsh)"\n\n_claudefy() {\n  local commands="${commands}"\n  _arguments '1: :($commands)'\n}\ncompdef _claudefy claudefy`,
       );
     } else {
       console.log(
-        `# claudefy completion\n# Add to your shell profile:\n# eval "$(claudefy completion --bash)"\n\n_claudefy() {\n  local commands="${commands}"\n  COMPREPLY=($(compgen -W "$commands" -- "\${COMP_WORDS[COMP_CWORD]}"))\n}\ncomplete -F _claudefy claudefy`,
+        `# claudefy bash completion\n# Add to your .bashrc:\n# eval "$(claudefy completion --bash)"\n\n_claudefy() {\n  local commands="${commands}"\n  COMPREPLY=($(compgen -W "$commands" -- "\${COMP_WORDS[COMP_CWORD]}"))\n}\ncomplete -F _claudefy claudefy`,
       );
     }
   });
