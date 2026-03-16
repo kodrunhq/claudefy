@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { writeFile } from "node:fs/promises";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PushCommand } from "./push.js";
@@ -7,12 +6,6 @@ import { HookManager } from "../hook-manager/hook-manager.js";
 import { output } from "../output.js";
 import { promptPassphraseSetup } from "../encryptor/passphrase.js";
 import { withLock } from "../lockfile/lockfile.js";
-
-const LFS_GITATTRIBUTES = [
-  "projects/**/*.jsonl filter=lfs diff=lfs merge=lfs -text",
-  "projects/**/*.jsonl.age filter=lfs diff=lfs merge=lfs -text",
-  "",
-].join("\n");
 
 export interface InitOptions {
   backend?: string;
@@ -89,7 +82,7 @@ export class InitCommand {
       await gitAdapter.ensureMachineBranch(config.machineId);
 
       // 3. Write .gitattributes for LFS tracking of large session files
-      await writeFile(join(gitAdapter.getStorePath(), ".gitattributes"), LFS_GITATTRIBUTES);
+      await gitAdapter.ensureGitattributes();
 
       // 4. Run initial push
       const pushCommand = new PushCommand(this.homeDir);

@@ -46,6 +46,7 @@ export class JoinCommand {
       const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
       await gitAdapter.initStore(options.backend);
       await gitAdapter.ensureMachineBranch(config.machineId);
+      await gitAdapter.ensureGitattributes();
 
       // 3. Prompt for passphrase if the store has encrypted files and none was provided
       let passphrase = options.passphrase;

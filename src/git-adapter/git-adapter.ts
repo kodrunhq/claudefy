@@ -7,6 +7,12 @@ import { join } from "node:path";
 
 const execFileAsync = promisify(execFile);
 
+const LFS_GITATTRIBUTES = [
+  "projects/**/*.jsonl filter=lfs diff=lfs merge=lfs -text",
+  "projects/**/*.jsonl.age filter=lfs diff=lfs merge=lfs -text",
+  "",
+].join("\n");
+
 export interface CommitResult {
   committed: boolean;
   pushed: boolean;
@@ -225,6 +231,13 @@ export class GitAdapter {
       await this.git!.reset(["--hard", currentBranch]);
       await this.git!.push(["--force", "-u", "origin", "main"]);
       await this.git!.checkout(currentBranch);
+    }
+  }
+
+  async ensureGitattributes(): Promise<void> {
+    const path = join(this.storePath, ".gitattributes");
+    if (!existsSync(path)) {
+      await writeFile(path, LFS_GITATTRIBUTES);
     }
   }
 

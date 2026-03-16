@@ -1,7 +1,23 @@
 import { ConfigManager } from "../config/config-manager.js";
+import { output } from "../output.js";
 
 export class ConfigCommand {
   private homeDir: string;
+
+  private static readonly CONFIG_SCHEMA: Record<string, { type: string; values?: unknown[] }> = {
+    "encryption.enabled": { type: "boolean" },
+    "encryption.useKeychain": { type: "boolean" },
+    "encryption.cacheDuration": { type: "string" },
+    "encryption.mode": { type: "string", values: ["reactive", "full"] },
+    "backend.type": { type: "string", values: ["git"] },
+    "backend.url": { type: "string" },
+    "claudeJson.sync": { type: "boolean" },
+    "claudeJson.syncMcpServers": { type: "boolean" },
+    "secretScanner.customPatterns": { type: "object" },
+    "backups.maxCount": { type: "number" },
+    "backups.maxAgeDays": { type: "number" },
+    version: { type: "number" },
+  };
 
   constructor(homeDir: string) {
     this.homeDir = homeDir;
@@ -46,12 +62,39 @@ export class ConfigCommand {
       }
     }
 
-    const parsed = this.parseValue(value);
+    const schema = ConfigCommand.CONFIG_SCHEMA[key];
+    const parsed = this.parseValue(value, schema?.type);
+
+    if (schema) {
+      const actualType = typeof parsed;
+      if (actualType !== schema.type && !(schema.type === "object" && Array.isArray(parsed))) {
+        throw new Error(`"${key}" expects ${schema.type}, got ${actualType}`);
+      }
+      if (schema.values && !schema.values.includes(parsed)) {
+        throw new Error(`"${key}" must be one of: ${schema.values.join(", ")}`);
+      }
+    } else {
+      output.warn(`Unknown config key "${key}". Setting anyway.`);
+    }
+
     await configManager.set(key, parsed);
   }
 
-  private parseValue(value: unknown): unknown {
+  private parseValue(value: unknown, schemaType?: string): unknown {
     if (typeof value !== "string") return value;
+
+    // If schema says string, don't coerce
+    if (schemaType === "string") return value;
+
+    // If schema says object, try JSON parsing
+    if (schemaType === "object") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        throw new Error(`Expected JSON for object value, got: ${value}`);
+      }
+    }
+
     if (value === "true") return true;
     if (value === "false") return false;
     const num = Number(value);
