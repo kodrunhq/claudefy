@@ -20,6 +20,9 @@ export interface PushOptions {
   skipEncryption?: boolean;
   skipSecretScan?: boolean;
   passphrase?: string;
+  only?: string;
+  dryRun?: boolean;
+  force?: boolean;
 }
 
 export class PushCommand {
@@ -52,7 +55,20 @@ export class PushCommand {
       if (!existsSync(this.claudeDir)) {
         throw new Error(`No ${this.claudeDir} directory found. Nothing to push.`);
       }
-      const classification = await syncFilter.classify(this.claudeDir);
+      let classification = await syncFilter.classify(this.claudeDir);
+
+      if (options.only) {
+        const filtered = {
+          ...classification,
+          allowlist: classification.allowlist.filter((i) => i.name === options.only),
+          unknown: classification.unknown.filter((i) => i.name === options.only),
+        };
+        if (filtered.allowlist.length === 0 && filtered.unknown.length === 0) {
+          if (!options.quiet) output.warn(`No item matching "${options.only}" found.`);
+          return;
+        }
+        classification = filtered;
+      }
 
       const willEncrypt = config.encryption.enabled && !options.skipEncryption;
       if (!options.quiet) {
@@ -68,19 +84,51 @@ export class PushCommand {
       const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
       await gitAdapter.initStore(config.backend.url);
       await gitAdapter.ensureMachineBranch(config.machineId);
-      try {
-        await gitAdapter.pullAndMergeMain();
-      } catch {
-        if (!options.quiet) {
-          output.info(
-            "Warning: Unable to pull latest changes from remote; proceeding with local state only.",
-          );
+      if (!options.force) {
+        try {
+          await gitAdapter.pullAndMergeMain();
+        } catch {
+          if (!options.quiet) {
+            output.info(
+              "Warning: Unable to pull latest changes from remote; proceeding with local state only.",
+            );
+          }
         }
       }
 
       const storePath = gitAdapter.getStorePath();
       const configDir = join(storePath, STORE_CONFIG_DIR);
       const unknownDir = join(storePath, STORE_UNKNOWN_DIR);
+
+      // Dry-run: show what would be pushed without modifying anything
+      if (options.dryRun) {
+        const { computeDiff } = await import("../diff-utils/diff-utils.js");
+        const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
+        const tmpLocal = join(this.homeDir, ".claudefy", ".dryrun-tmp");
+        if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
+        await mkTmp(tmpLocal, { recursive: true });
+        try {
+          for (const item of classification.allowlist) {
+            const src = join(this.claudeDir, item.name);
+            if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
+          }
+          const diff = await computeDiff(tmpLocal, configDir);
+          if (!diff.hasChanges) {
+            if (!options.quiet) output.info("Dry run: no push changes detected.");
+          } else {
+            if (!options.quiet) {
+              output.heading("Dry run — push would change:");
+              for (const f of diff.added) output.success(`  Added:    ${f}`);
+              for (const f of diff.modified) output.warn(`  Modified: ${f}`);
+              for (const f of diff.deleted) output.error(`  Deleted:  ${f}`);
+            }
+            process.exitCode = 1;
+          }
+        } finally {
+          if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
+        }
+        return;
+      }
 
       // 3. Build path mapper
       const links = await this.configManager.getLinks();

@@ -106,7 +106,10 @@ program
 program
   .command("push")
   .description("Push local state to remote store")
-  .action(async function (this: Command) {
+  .option("--only <item>", "Sync only this item")
+  .option("--force", "Skip pull-before-push")
+  .option("--dry-run", "Show what would change without writing")
+  .action(async function (this: Command, options) {
     try {
       const global = await getGlobalOpts(this);
       const { PushCommand } = await import("./commands/push.js");
@@ -116,6 +119,9 @@ program
         skipEncryption: global.skipEncryption,
         skipSecretScan: global.skipSecretScan,
         passphrase: global.passphrase,
+        only: options.only,
+        force: options.force ?? false,
+        dryRun: options.dryRun ?? false,
       });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
@@ -126,7 +132,9 @@ program
 program
   .command("pull")
   .description("Pull remote state to local machine")
-  .action(async function (this: Command) {
+  .option("--only <item>", "Sync only this item")
+  .option("--dry-run", "Show what would change without writing")
+  .action(async function (this: Command, options) {
     try {
       const global = await getGlobalOpts(this);
       const { PullCommand } = await import("./commands/pull.js");
@@ -135,6 +143,8 @@ program
         quiet: global.quiet,
         skipEncryption: global.skipEncryption,
         passphrase: global.passphrase,
+        only: options.only,
+        dryRun: options.dryRun ?? false,
       });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
@@ -172,6 +182,29 @@ program
       const cmd = new StatusCommand(homeDir);
       const result = await cmd.execute();
       console.log(JSON.stringify(result, null, 2));
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("diff")
+  .description("Preview what push or pull would change")
+  .option("--push", "Show only push-direction changes")
+  .option("--pull", "Show only pull-direction changes")
+  .action(async function (this: Command, options) {
+    try {
+      const global = await getGlobalOpts(this);
+      const { DiffCommand } = await import("./commands/diff.js");
+      const cmd = new DiffCommand(homeDir);
+      await cmd.execute({
+        quiet: global.quiet,
+        skipEncryption: global.skipEncryption,
+        passphrase: global.passphrase,
+        push: options.push ?? false,
+        pull: options.pull ?? false,
+      });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -249,6 +282,40 @@ program
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
+    }
+  });
+
+program
+  .command("logs")
+  .description("Show recent sync operations")
+  .option("-n, --count <number>", "Number of entries to show", "10")
+  .action(async (cmdOpts) => {
+    try {
+      const { LogsCommand } = await import("./commands/logs.js");
+      const cmd = new LogsCommand(homeDir);
+      await cmd.execute({ count: parseInt(cmdOpts.count, 10) });
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("completion")
+  .description("Output shell completion script")
+  .option("--bash", "Output bash completion")
+  .option("--zsh", "Output zsh completion")
+  .option("--fish", "Output fish completion")
+  .action((cmdOpts) => {
+    const commands = program.commands.map((c) => c.name()).join(" ");
+    if (cmdOpts.zsh || cmdOpts.fish) {
+      console.log(
+        `# claudefy completion\n# Add to your shell profile:\n# eval "$(claudefy completion --zsh)"\n\n_claudefy() {\n  local commands="${commands}"\n  _arguments '1: :($commands)'\n}\ncompdef _claudefy claudefy`,
+      );
+    } else {
+      console.log(
+        `# claudefy completion\n# Add to your shell profile:\n# eval "$(claudefy completion --bash)"\n\n_claudefy() {\n  local commands="${commands}"\n  COMPREPLY=($(compgen -W "$commands" -- "\${COMP_WORDS[COMP_CWORD]}"))\n}\ncomplete -F _claudefy claudefy`,
+      );
     }
   });
 
@@ -350,6 +417,56 @@ hooksCmd
       const { HooksCommand } = await import("./commands/hooks.js");
       const cmd = new HooksCommand(homeDir);
       await cmd.remove();
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("uninstall")
+  .description("Remove claudefy hooks, config, and store")
+  .option("--confirm", "Skip confirmation prompt")
+  .action(async function (this: Command, options) {
+    try {
+      const global = await getGlobalOpts(this);
+      const { UninstallCommand } = await import("./commands/uninstall.js");
+      const cmd = new UninstallCommand(homeDir);
+      await cmd.execute({ quiet: global.quiet, confirm: options.confirm });
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("export")
+  .description("Create a portable backup archive")
+  .requiredOption("-o, --output <path>", "Output file path (e.g., ~/claude-backup.tar.gz)")
+  .action(async function (this: Command, options) {
+    try {
+      const global = await getGlobalOpts(this);
+      const { ExportCommand } = await import("./commands/export.js");
+      const cmd = new ExportCommand(homeDir);
+      await cmd.execute({ quiet: global.quiet, output: options.output });
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
+    }
+  });
+
+program
+  .command("rotate-passphrase")
+  .description("Re-encrypt all files with a new passphrase")
+  .action(async function (this: Command) {
+    try {
+      const global = await getGlobalOpts(this);
+      const { RotatePassphraseCommand } = await import("./commands/rotate-passphrase.js");
+      const cmd = new RotatePassphraseCommand(homeDir);
+      await cmd.execute({
+        quiet: global.quiet,
+        oldPassphrase: global.passphrase,
+      });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);

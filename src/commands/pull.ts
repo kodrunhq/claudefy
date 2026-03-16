@@ -18,6 +18,8 @@ export interface PullOptions {
   quiet: boolean;
   skipEncryption?: boolean;
   passphrase?: string;
+  only?: string;
+  dryRun?: boolean;
 }
 
 export interface PullResult {
@@ -62,6 +64,53 @@ export class PullCommand {
 
     const storePath = gitAdapter.getStorePath();
     const resolvedClaudeDir = resolve(this.claudeDir);
+
+    // Dry-run: show what would be pulled without modifying anything
+    if (options.dryRun) {
+      const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
+      const { computeDiff } = await import("../diff-utils/diff-utils.js");
+      const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
+      const tmpStore = join(claudefyDir, ".dryrun-store-tmp");
+      const tmpLocal = join(claudefyDir, ".dryrun-local-tmp");
+      if (existsSync(tmpStore)) await rmTmp(tmpStore, { recursive: true, force: true });
+      if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
+      await mkTmp(tmpStore, { recursive: true });
+      await mkTmp(tmpLocal, { recursive: true });
+      try {
+        // Copy store config, stripping .age extensions
+        if (existsSync(storeConfigDir)) {
+          await cp(storeConfigDir, tmpStore, { recursive: true });
+          await this.stripAgeExtensionsForDryRun(tmpStore);
+        }
+        // Copy allowlisted local files
+        if (existsSync(this.claudeDir)) {
+          const syncFilterConfig = await this.configManager.getSyncFilter();
+          const { SyncFilter } = await import("../sync-filter/sync-filter.js");
+          const syncFilter = new SyncFilter(syncFilterConfig);
+          const classification = await syncFilter.classify(this.claudeDir);
+          for (const item of classification.allowlist) {
+            const src = join(this.claudeDir, item.name);
+            if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
+          }
+        }
+        const diff = await computeDiff(tmpStore, tmpLocal);
+        if (!diff.hasChanges) {
+          if (!options.quiet) output.info("Dry run: no pull changes detected.");
+        } else {
+          if (!options.quiet) {
+            output.heading("Dry run — pull would change:");
+            for (const f of diff.added) output.success(`  Added:    ${f}`);
+            for (const f of diff.modified) output.warn(`  Modified: ${f}`);
+            for (const f of diff.deleted) output.error(`  Deleted:  ${f}`);
+          }
+          process.exitCode = 1;
+        }
+      } finally {
+        if (existsSync(tmpStore)) await rmTmp(tmpStore, { recursive: true, force: true });
+        if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
+      }
+      return result;
+    }
 
     // 2. Check for override marker (check on main branch where overrides are written)
     const override = await this.checkOverrideOnMain(gitAdapter);
@@ -243,7 +292,7 @@ export class PullCommand {
         await mkdir(this.claudeDir, { recursive: true });
 
         // 7a. Deep merge settings.json with hook filtering
-        if (existsSync(remoteSettingsPath)) {
+        if (existsSync(remoteSettingsPath) && (!options.only || options.only === "settings.json")) {
           const localSettingsPath = join(this.claudeDir, "settings.json");
           let remoteSettings: Record<string, unknown>;
           try {
@@ -295,6 +344,7 @@ export class PullCommand {
           const entries = await readdir(tmpConfigDir, { withFileTypes: true });
           for (const entry of entries) {
             if (entry.name === "settings.json") continue; // Already handled
+            if (options.only && entry.name !== options.only) continue;
 
             // Security: skip symlinks to prevent path traversal attacks
             if (entry.isSymbolicLink()) {
@@ -323,6 +373,8 @@ export class PullCommand {
         if (existsSync(tmpUnknownDir)) {
           const entries = await readdir(tmpUnknownDir, { withFileTypes: true });
           for (const entry of entries) {
+            if (options.only && entry.name !== options.only) continue;
+
             // Security: skip symlinks to prevent path traversal attacks
             if (entry.isSymbolicLink()) {
               output.warn(`Skipping symlink in unknown store: ${entry.name}`);
@@ -445,6 +497,22 @@ export class PullCommand {
         await this.walkAgeFiles(fullPath, results);
       } else if (entry.name.endsWith(".age")) {
         results.push(fullPath);
+      }
+    }
+  }
+
+  private async stripAgeExtensionsForDryRun(dir: string): Promise<void> {
+    if (!existsSync(dir)) return;
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await this.stripAgeExtensionsForDryRun(fullPath);
+      } else if (entry.name.endsWith(".age")) {
+        const baseName = entry.name.slice(0, -4);
+        const newPath = join(dir, baseName);
+        await rm(fullPath);
+        await writeFile(newPath, "[encrypted content]");
       }
     }
   }
