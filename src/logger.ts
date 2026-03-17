@@ -40,8 +40,8 @@ export class Logger {
       };
       const line = JSON.stringify(entry) + "\n";
 
-      await mkdir(dirname(this.filePath), { recursive: true });
-      await appendFile(this.filePath, line);
+      await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
+      await appendFile(this.filePath, line, { mode: 0o600 });
       await this.rotateIfNeeded();
     } catch {
       // Logging is best-effort; never crash the caller

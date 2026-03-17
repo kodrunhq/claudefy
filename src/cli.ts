@@ -10,6 +10,12 @@ import { resolvePassphrase } from "./encryptor/passphrase.js";
 import { Logger } from "./logger.js";
 import type { ReadRecentFilter } from "./logger.js";
 
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|\x1b[@-_]/g;
+function stripAnsi(str: string): string {
+  return str.replace(ANSI_RE, "");
+}
+
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
 
@@ -318,7 +324,9 @@ program
           : entry.level === "warn"
             ? chalk.yellow(entry.level.toUpperCase())
             : chalk.blue(entry.level.toUpperCase());
-      console.log(`${chalk.dim(time)} ${levelColor} [${entry.operation}] ${entry.message}`);
+      console.log(
+        `${chalk.dim(time)} ${levelColor} [${entry.operation}] ${stripAnsi(entry.message)}`,
+      );
     }
   });
 

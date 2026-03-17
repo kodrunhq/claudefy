@@ -81,14 +81,14 @@ export class Lockfile {
   }
 
   private async writeLock(): Promise<boolean> {
-    await mkdir(dirname(this.path), { recursive: true });
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     const data: LockData = {
       pid: process.pid,
       timestamp: new Date().toISOString(),
       operation: this.operation,
     };
     try {
-      await writeFile(this.path, JSON.stringify(data), { flag: "wx" });
+      await writeFile(this.path, JSON.stringify(data), { flag: "wx", mode: 0o600 });
       return true;
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
@@ -113,6 +113,11 @@ export class Lockfile {
   }
 
   private isProcessAlive(pid: number): boolean {
+    // pid=0 signals the process group; pid<0 signals a group or all processes.
+    // Neither represents a real process that owns a lock.
+    if (!Number.isInteger(pid) || pid <= 0 || pid > 4194304) {
+      return false;
+    }
     try {
       process.kill(pid, 0);
       return true;
