@@ -12,12 +12,15 @@ import { Encryptor } from "../encryptor/encryptor.js";
 import { SecretScanner } from "../secret-scanner/scanner.js";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
+import { Logger } from "../logger.js";
+import { Lockfile } from "../lockfile.js";
 
 export interface PushOptions {
   quiet: boolean;
   skipEncryption?: boolean;
   skipSecretScan?: boolean;
   passphrase?: string;
+  logger?: Logger;
 }
 
 export class PushCommand {
@@ -32,6 +35,35 @@ export class PushCommand {
   }
 
   async execute(options: PushOptions): Promise<void> {
+    const claudefyDir = join(this.homeDir, ".claudefy");
+    const lockfile = new Lockfile(join(claudefyDir, "sync.lock"), {
+      operation: "push",
+      retries: 3,
+      retryDelayMs: 1000,
+    });
+    const log = options.logger;
+
+    await log?.log("info", "push", "Push started");
+
+    const acquired = await lockfile.acquire();
+    if (!acquired) {
+      const msg = "Another claudefy process is running. Push skipped after retries.";
+      await log?.log("warn", "push", msg);
+      throw new Error(msg);
+    }
+
+    try {
+      await this.executeInner(options, log);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await log?.log("error", "push", msg);
+      throw err;
+    } finally {
+      await lockfile.release();
+    }
+  }
+
+  private async executeInner(options: PushOptions, log: Logger | undefined): Promise<void> {
     const config = await this.configManager.load();
     const syncFilterConfig = await this.configManager.getSyncFilter();
     const syncFilter = new SyncFilter(syncFilterConfig);
@@ -43,6 +75,11 @@ export class PushCommand {
     const classification = await syncFilter.classify(this.claudeDir);
 
     const willEncrypt = config.encryption.enabled && !options.skipEncryption;
+    await log?.log(
+      "info",
+      "push",
+      `Classified: ${classification.allowlist.length} allowed, ${classification.unknown.length} unknown, ${classification.denylist.length} denied`,
+    );
     if (!options.quiet) {
       const unknownLabel = willEncrypt ? "unknown (encrypted)" : "unknown";
       output.info(
@@ -58,11 +95,12 @@ export class PushCommand {
     await gitAdapter.ensureMachineBranch(config.machineId);
     try {
       await gitAdapter.pullAndMergeMain();
-    } catch {
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const msg = `Unable to pull latest changes from remote; proceeding with local state only. Detail: ${detail}`;
+      await log?.log("warn", "push", msg);
       if (!options.quiet) {
-        output.info(
-          "Warning: Unable to pull latest changes from remote; proceeding with local state only.",
-        );
+        output.info(msg);
       }
     }
 
@@ -153,6 +191,7 @@ export class PushCommand {
         }
       }
 
+      await log?.log("info", "push", `Encrypted ${filesToEncrypt.size} file(s)`);
       if (!options.quiet) {
         output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
       }
@@ -169,15 +208,31 @@ export class PushCommand {
       config.machineId,
     );
 
-    if (!options.quiet) {
-      if (commitResult.committed && !commitResult.pushed) {
+    if (commitResult.committed && !commitResult.pushed) {
+      await log?.log("warn", "push", "Changes committed locally but push to remote failed");
+      if (!options.quiet) {
         output.warn(
           "Changes were committed locally, but pushing to the remote failed. Retry with 'claudefy push'.",
         );
       }
-      if (commitResult.pushed && !commitResult.mergedToMain) {
+    }
+    if (commitResult.pushed && !commitResult.mergedToMain) {
+      await log?.log(
+        "warn",
+        "push",
+        "Pushed but merge to main failed — may need conflict resolution",
+      );
+      if (!options.quiet) {
         output.warn("Unable to merge machine branch into main. You may need to resolve conflicts.");
       }
+    }
+
+    await log?.log(
+      "info",
+      "push",
+      `Push complete. committed=${commitResult.committed} pushed=${commitResult.pushed}`,
+    );
+    if (!options.quiet) {
       output.success("Push complete.");
     }
   }

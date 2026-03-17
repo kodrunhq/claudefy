@@ -11,11 +11,14 @@ import { Merger } from "../merger/merger.js";
 import { BackupManager } from "../backup-manager/backup-manager.js";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR } from "../config/defaults.js";
+import { Logger } from "../logger.js";
+import { Lockfile } from "../lockfile.js";
 
 export interface PullOptions {
   quiet: boolean;
   skipEncryption?: boolean;
   passphrase?: string;
+  logger?: Logger;
 }
 
 export interface PullResult {
@@ -38,16 +41,54 @@ export class PullCommand {
   async execute(options: PullOptions): Promise<PullResult> {
     const config = await this.configManager.load();
     const result: PullResult = { overrideDetected: false, filesUpdated: 0 };
-
-    // 1. Initialize git adapter, switch to machine branch, pull & merge main
     const claudefyDir = join(this.homeDir, ".claudefy");
+    const lockfile = new Lockfile(join(claudefyDir, "sync.lock"), {
+      operation: "pull",
+      retries: 3,
+      retryDelayMs: 1000,
+    });
+    const log = options.logger;
+
+    await log?.log("info", "pull", "Pull started");
+
+    const acquired = await lockfile.acquire();
+    if (!acquired) {
+      const msg = "Another claudefy process is running. Pull skipped after retries.";
+      await log?.log("warn", "pull", msg);
+      throw new Error(msg);
+    }
+
+    try {
+      return await this.executeInner(options, config, claudefyDir, result, log);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await log?.log("error", "pull", msg);
+      throw err;
+    } finally {
+      await lockfile.release();
+    }
+  }
+
+  private async executeInner(
+    options: PullOptions,
+    config: Awaited<ReturnType<ConfigManager["load"]>>,
+    claudefyDir: string,
+    result: PullResult,
+    log: Logger | undefined,
+  ): Promise<PullResult> {
+    // 1. Initialize git adapter, switch to machine branch, pull & merge main
     const gitAdapter = new GitAdapter(claudefyDir);
     await gitAdapter.initStore(config.backend.url);
     await gitAdapter.ensureMachineBranch(config.machineId);
     try {
       await gitAdapter.pullAndMergeMain();
-    } catch {
-      // Fresh store with no remote history yet
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const msg = `Unable to pull from remote (may be fresh store): ${detail}`;
+      await log?.log("warn", "pull", msg);
+      if (!options.quiet) {
+        output.info(msg);
+      }
     }
 
     const storePath = gitAdapter.getStorePath();
@@ -57,6 +98,11 @@ export class PullCommand {
     const override = await this.checkOverrideOnMain(gitAdapter);
     if (override) {
       result.overrideDetected = true;
+      await log?.log(
+        "warn",
+        "pull",
+        `Override detected from machine: ${override.machine} at ${override.timestamp}`,
+      );
       if (!options.quiet) {
         output.warn(`Override detected from machine: ${override.machine} at ${override.timestamp}`);
       }
@@ -67,6 +113,9 @@ export class PullCommand {
         result.backupPath = await backupManager.createBackup(this.claudeDir, "pre-override");
       }
 
+      if (result.backupPath) {
+        await log?.log("info", "pull", `Backup created at: ${result.backupPath}`);
+      }
       if (!options.quiet && result.backupPath) {
         output.info(`Backup created at: ${result.backupPath}`);
       }
@@ -329,6 +378,11 @@ export class PullCommand {
     // NO re-encryption step (store is never modified)
     // NO commitAndPush (pull should not create commits)
 
+    await log?.log(
+      "info",
+      "pull",
+      `Pull complete. ${result.filesUpdated} items updated. override=${result.overrideDetected}`,
+    );
     if (!options.quiet) {
       output.success(`Pull complete. ${result.filesUpdated} items updated.`);
     }

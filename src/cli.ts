@@ -4,14 +4,18 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import chalk from "chalk";
 import { output } from "./output.js";
 import { resolvePassphrase } from "./encryptor/passphrase.js";
+import { Logger } from "./logger.js";
+import type { ReadRecentFilter } from "./logger.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
 
 const program = new Command();
 const homeDir = homedir();
+const syncLogger = new Logger(join(homeDir, ".claudefy", "logs", "sync.log"));
 
 async function getGlobalOpts(cmd: Command): Promise<{
   quiet: boolean;
@@ -116,6 +120,7 @@ program
         skipEncryption: global.skipEncryption,
         skipSecretScan: global.skipSecretScan,
         passphrase: global.passphrase,
+        logger: syncLogger,
       });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
@@ -135,6 +140,7 @@ program
         quiet: global.quiet,
         skipEncryption: global.skipEncryption,
         passphrase: global.passphrase,
+        logger: syncLogger,
       });
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
@@ -281,6 +287,38 @@ configCmd
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
+    }
+  });
+
+program
+  .command("logs")
+  .description("Show recent sync log entries")
+  .option("-n, --count <number>", "Number of entries to show", "20")
+  .option("--errors", "Show only errors")
+  .option("--operation <op>", "Filter by operation (push/pull)")
+  .action(async (options) => {
+    const filter: ReadRecentFilter = {};
+    if (options.errors) filter.level = "error";
+    if (options.operation) filter.operation = options.operation;
+    const count = parseInt(options.count, 10);
+    if (isNaN(count) || count < 1) {
+      output.error("--count must be a positive integer");
+      return;
+    }
+    const entries = await syncLogger.readRecent(count, filter);
+    if (entries.length === 0) {
+      output.dim("No log entries found.");
+      return;
+    }
+    for (const entry of entries) {
+      const time = entry.timestamp.replace("T", " ").replace(/\.\d+Z$/, "Z");
+      const levelColor =
+        entry.level === "error"
+          ? chalk.red(entry.level.toUpperCase())
+          : entry.level === "warn"
+            ? chalk.yellow(entry.level.toUpperCase())
+            : chalk.blue(entry.level.toUpperCase());
+      console.log(`${chalk.dim(time)} ${levelColor} [${entry.operation}] ${entry.message}`);
     }
   });
 
