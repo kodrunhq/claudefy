@@ -34,31 +34,35 @@ export class HookManager {
       settings.hooks = {};
     }
 
+    // Remove any existing claudefy hooks so install always applies the latest format
+    for (const event of Object.keys(settings.hooks)) {
+      if (!Array.isArray(settings.hooks[event])) continue;
+      settings.hooks[event] = settings.hooks[event].filter(
+        (h: HookEventConfig) => !this.isClaudefyHookEntry(h),
+      );
+    }
+
     // SessionStart -> pull
     if (!Array.isArray(settings.hooks.SessionStart)) settings.hooks.SessionStart = [];
-    if (!this.hasClaudefyHook(settings.hooks.SessionStart)) {
-      settings.hooks.SessionStart.push({
-        hooks: [
-          {
-            type: "command",
-            command: "claudefy pull --quiet",
-          },
-        ],
-      });
-    }
+    settings.hooks.SessionStart.push({
+      hooks: [
+        {
+          type: "command",
+          command: "claudefy pull --quiet",
+        },
+      ],
+    });
 
     // SessionEnd -> push
     if (!Array.isArray(settings.hooks.SessionEnd)) settings.hooks.SessionEnd = [];
-    if (!this.hasClaudefyHook(settings.hooks.SessionEnd)) {
-      settings.hooks.SessionEnd.push({
-        hooks: [
-          {
-            type: "command",
-            command: "nohup claudefy push --quiet >/dev/null 2>&1 &",
-          },
-        ],
-      });
-    }
+    settings.hooks.SessionEnd.push({
+      hooks: [
+        {
+          type: "command",
+          command: "nohup claudefy push --quiet >/dev/null 2>&1 &",
+        },
+      ],
+    });
 
     await this.saveSettings(settings);
   }

@@ -110,6 +110,48 @@ describe("HookManager", () => {
     expect(settings.hooks).toBeUndefined();
   });
 
+  it("upgrades old hook format when install is called again", async () => {
+    // Simulate pre-1.5.1 hooks (no nohup)
+    const oldHooks = {
+      hooks: {
+        SessionStart: [{ hooks: [{ type: "command", command: "claudefy pull --quiet" }] }],
+        SessionEnd: [{ hooks: [{ type: "command", command: "claudefy push --quiet" }] }],
+      },
+    };
+    await writeFile(settingsPath, JSON.stringify(oldHooks));
+
+    const manager = new HookManager(settingsPath);
+    await manager.install();
+
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    // Should have exactly one claudefy hook per event (not duplicated)
+    expect(settings.hooks.SessionStart.length).toBe(1);
+    expect(settings.hooks.SessionEnd.length).toBe(1);
+    // SessionEnd should now use nohup
+    expect(settings.hooks.SessionEnd[0].hooks[0].command).toContain("nohup");
+  });
+
+  it("preserves non-claudefy hooks during upgrade", async () => {
+    const mixed = {
+      hooks: {
+        SessionStart: [
+          { hooks: [{ type: "command", command: "echo custom" }] },
+          { hooks: [{ type: "command", command: "claudefy pull --quiet" }] },
+        ],
+        SessionEnd: [{ hooks: [{ type: "command", command: "claudefy push --quiet" }] }],
+      },
+    };
+    await writeFile(settingsPath, JSON.stringify(mixed));
+
+    const manager = new HookManager(settingsPath);
+    await manager.install();
+
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    expect(settings.hooks.SessionStart.length).toBe(2);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe("echo custom");
+    expect(settings.hooks.SessionStart[1].hooks[0].command).toContain("claudefy pull");
+  });
+
   it("detects if hooks are installed", async () => {
     await writeFile(settingsPath, "{}");
     const manager = new HookManager(settingsPath);
