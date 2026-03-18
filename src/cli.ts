@@ -4,14 +4,24 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import chalk from "chalk";
 import { output } from "./output.js";
 import { resolvePassphrase } from "./encryptor/passphrase.js";
+import { Logger } from "./logger.js";
+import type { ReadRecentFilter } from "./logger.js";
+
+// eslint-disable-next-line no-control-regex
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|\x1b[@-_]/g;
+function stripAnsi(str: string): string {
+  return str.replace(ANSI_RE, "");
+}
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { version: string };
 
 const program = new Command();
 const homeDir = homedir();
+const syncLogger = new Logger(join(homeDir, ".claudefy", "logs", "sync.log"));
 
 async function getGlobalOpts(cmd: Command): Promise<{
   quiet: boolean;
@@ -119,6 +129,7 @@ program
         skipEncryption: global.skipEncryption,
         skipSecretScan: global.skipSecretScan,
         passphrase: global.passphrase,
+        logger: syncLogger,
         only: options.only,
         force: options.force ?? false,
         dryRun: options.dryRun ?? false,
@@ -143,6 +154,7 @@ program
         quiet: global.quiet,
         skipEncryption: global.skipEncryption,
         passphrase: global.passphrase,
+        logger: syncLogger,
         only: options.only,
         dryRun: options.dryRun ?? false,
       });
@@ -286,26 +298,6 @@ program
   });
 
 program
-  .command("logs")
-  .description("Show recent sync operations")
-  .option("-n, --count <number>", "Number of entries to show", "10")
-  .action(async function (this: Command, cmdOpts) {
-    try {
-      const global = await getGlobalOpts(this);
-      const { LogsCommand } = await import("./commands/logs.js");
-      const cmd = new LogsCommand(homeDir);
-      const count = parseInt(cmdOpts.count, 10);
-      if (!Number.isFinite(count) || count < 1) {
-        throw new Error(`Invalid count: "${cmdOpts.count}". Must be a positive number.`);
-      }
-      await cmd.execute({ ...global, count });
-    } catch (err: unknown) {
-      output.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
-    }
-  });
-
-program
   .command("completion")
   .description("Output shell completion script")
   .option("--bash", "Output bash completion")
@@ -361,6 +353,40 @@ configCmd
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
+    }
+  });
+
+program
+  .command("logs")
+  .description("Show recent sync log entries")
+  .option("-n, --count <number>", "Number of entries to show", "20")
+  .option("--errors", "Show only errors")
+  .option("--operation <op>", "Filter by operation (push/pull)")
+  .action(async (options) => {
+    const filter: ReadRecentFilter = {};
+    if (options.errors) filter.level = "error";
+    if (options.operation) filter.operation = options.operation;
+    const count = parseInt(options.count, 10);
+    if (isNaN(count) || count < 1) {
+      output.error("--count must be a positive integer");
+      return;
+    }
+    const entries = await syncLogger.readRecent(count, filter);
+    if (entries.length === 0) {
+      output.dim("No log entries found.");
+      return;
+    }
+    for (const entry of entries) {
+      const time = entry.timestamp.replace("T", " ").replace(/\.\d+Z$/, "Z");
+      const levelColor =
+        entry.level === "error"
+          ? chalk.red(entry.level.toUpperCase())
+          : entry.level === "warn"
+            ? chalk.yellow(entry.level.toUpperCase())
+            : chalk.blue(entry.level.toUpperCase());
+      console.log(
+        `${chalk.dim(time)} ${levelColor} [${entry.operation}] ${stripAnsi(entry.message)}`,
+      );
     }
   });
 

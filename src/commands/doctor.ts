@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { join } from "node:path";
 import { ConfigManager } from "../config/config-manager.js";
+import { Logger } from "../logger.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -30,6 +32,8 @@ export class DoctorCommand {
       checks.push(this.checkEncryption(config));
       checks.push(await this.checkRemote(config.backend.url));
     }
+
+    checks.push(await this.checkRecentSync());
 
     return checks;
   }
@@ -84,5 +88,46 @@ export class DoctorCommand {
     } catch {
       return { name: "remote-reachable", status: "fail", detail: `Cannot reach remote: ${url}` };
     }
+  }
+
+  private async checkRecentSync(): Promise<DoctorCheck> {
+    const logPath = join(this.homeDir, ".claudefy", "logs", "sync.log");
+    const logger = new Logger(logPath);
+    const recent = await logger.readRecent(20);
+
+    if (recent.length === 0) {
+      return {
+        name: "recent-sync",
+        status: "warn",
+        detail: "No sync log entries found. Hooks may not be running.",
+      };
+    }
+
+    const errors = recent.filter((e) => e.level === "error");
+    const warns = recent.filter((e) => e.level === "warn" && e.message.includes("skipped"));
+
+    if (errors.length > 0) {
+      const latest = errors[errors.length - 1];
+      return {
+        name: "recent-sync",
+        status: "warn",
+        detail: `${errors.length} error(s) in recent syncs. Latest: ${latest.message}`,
+      };
+    }
+
+    if (warns.length > 0) {
+      return {
+        name: "recent-sync",
+        status: "warn",
+        detail: `${warns.length} skipped sync(s) in recent log (lock contention?)`,
+      };
+    }
+
+    const latest = recent[recent.length - 1];
+    return {
+      name: "recent-sync",
+      status: "pass",
+      detail: `Last sync: ${latest.timestamp} (${latest.operation})`,
+    };
   }
 }

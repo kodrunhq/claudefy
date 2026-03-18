@@ -14,6 +14,7 @@ import { output } from "../output.js";
 import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR } from "../config/defaults.js";
 import { Lockfile } from "../lockfile/lockfile.js";
 import { ClaudeJsonSync } from "../claude-json-sync/claude-json-sync.js";
+import { Logger } from "../logger.js";
 
 export interface PullOptions {
   quiet: boolean;
@@ -21,6 +22,7 @@ export interface PullOptions {
   passphrase?: string;
   only?: string;
   dryRun?: boolean;
+  logger?: Logger;
 }
 
 export interface PullResult {
@@ -42,16 +44,36 @@ export class PullCommand {
 
   async execute(options: PullOptions): Promise<PullResult> {
     const claudefyDir = join(this.homeDir, ".claudefy");
+    const log = options.logger;
+
+    await log?.log("info", "pull", "Pull started");
+
     const lock = Lockfile.tryAcquire("pull", !!options.quiet, claudefyDir);
-    if (!lock) return { overrideDetected: false, filesUpdated: 0 };
+    if (!lock) {
+      const msg = "Another claudefy process is running. Pull skipped.";
+      await log?.log("warn", "pull", msg);
+      if (!options.quiet) {
+        output.warn(msg);
+      }
+      return { overrideDetected: false, filesUpdated: 0 };
+    }
+
     try {
-      return await this.executeLocked(options, claudefyDir);
+      return await this.executeLocked(options, claudefyDir, log);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await log?.log("error", "pull", msg);
+      throw err;
     } finally {
       lock.release();
     }
   }
 
-  private async executeLocked(options: PullOptions, claudefyDir: string): Promise<PullResult> {
+  private async executeLocked(
+    options: PullOptions,
+    claudefyDir: string,
+    log: Logger | undefined,
+  ): Promise<PullResult> {
     const config = await this.configManager.load();
     const result: PullResult = { overrideDetected: false, filesUpdated: 0 };
     const gitAdapter = new GitAdapter(claudefyDir);
@@ -59,8 +81,13 @@ export class PullCommand {
     await gitAdapter.ensureMachineBranch(config.machineId);
     try {
       await gitAdapter.pullAndMergeMain();
-    } catch {
-      // Fresh store with no remote history yet
+    } catch (err: unknown) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const msg = `Unable to pull from remote (may be fresh store): ${detail}`;
+      await log?.log("warn", "pull", msg);
+      if (!options.quiet) {
+        output.info(msg);
+      }
     }
 
     const storePath = gitAdapter.getStorePath();
@@ -120,6 +147,11 @@ export class PullCommand {
     const override = await this.checkOverrideOnMain(gitAdapter);
     if (override) {
       result.overrideDetected = true;
+      await log?.log(
+        "warn",
+        "pull",
+        `Override detected from machine: ${override.machine} at ${override.timestamp}`,
+      );
       if (!options.quiet) {
         output.warn(`Override detected from machine: ${override.machine} at ${override.timestamp}`);
       }
@@ -130,6 +162,9 @@ export class PullCommand {
         result.backupPath = await backupManager.createBackup(this.claudeDir, "pre-override");
       }
 
+      if (result.backupPath) {
+        await log?.log("info", "pull", `Backup created at: ${result.backupPath}`);
+      }
       if (!options.quiet && result.backupPath) {
         output.info(`Backup created at: ${result.backupPath}`);
       }
@@ -428,6 +463,7 @@ export class PullCommand {
 
     if (interruptedSignal) {
       // Re-raise the original signal so the process exits with the correct code (130/143)
+      await log?.log("warn", "pull", "Pull interrupted by signal");
       if (!options.quiet) {
         output.warn("Pull interrupted by signal.");
       }
@@ -435,6 +471,11 @@ export class PullCommand {
       return result;
     }
 
+    await log?.log(
+      "info",
+      "pull",
+      `Pull complete. ${result.filesUpdated} items updated. override=${result.overrideDetected}`,
+    );
     if (!options.quiet) {
       output.success(`Pull complete. ${result.filesUpdated} items updated.`);
     }
