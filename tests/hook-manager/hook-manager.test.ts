@@ -74,6 +74,42 @@ describe("HookManager", () => {
     expect(settings.hooks.SessionEnd).toBeUndefined();
   });
 
+  it("installs SessionEnd hook with nohup for detached execution", async () => {
+    await writeFile(settingsPath, "{}");
+
+    const manager = new HookManager(settingsPath);
+    await manager.install();
+
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    const endHook = settings.hooks.SessionEnd[0].hooks[0];
+    expect(endHook.command).toContain("nohup");
+    expect(endHook.command).toContain("&");
+  });
+
+  it("removes nohup-wrapped claudefy hooks", async () => {
+    const withHooks = {
+      hooks: {
+        SessionEnd: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command: "nohup claudefy push --quiet >/dev/null 2>&1 &",
+              },
+            ],
+          },
+        ],
+      },
+    };
+    await writeFile(settingsPath, JSON.stringify(withHooks));
+
+    const manager = new HookManager(settingsPath);
+    await manager.remove();
+
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    expect(settings.hooks).toBeUndefined();
+  });
+
   it("detects if hooks are installed", async () => {
     await writeFile(settingsPath, "{}");
     const manager = new HookManager(settingsPath);

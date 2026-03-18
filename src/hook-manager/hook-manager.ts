@@ -54,7 +54,7 @@ export class HookManager {
         hooks: [
           {
             type: "command",
-            command: "claudefy push --quiet",
+            command: "nohup claudefy push --quiet >/dev/null 2>&1 &",
           },
         ],
       });
@@ -104,7 +104,7 @@ export class HookManager {
     if (!Array.isArray(hookEntry.hooks)) return false;
     return hookEntry.hooks.some((h: HookEntry) => {
       const command = typeof h.command === "string" ? h.command.trim() : "";
-      return command.startsWith("claudefy pull") || command.startsWith("claudefy push");
+      return command.includes("claudefy pull") || command.includes("claudefy push");
     });
   }
 
