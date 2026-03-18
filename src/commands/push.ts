@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
+import chalk from "chalk";
 import { ConfigManager } from "../config/config-manager.js";
 import { SyncFilter } from "../sync-filter/sync-filter.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -10,18 +11,26 @@ import { PathMapper } from "../path-mapper/path-mapper.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
 import { Encryptor } from "../encryptor/encryptor.js";
 import { SecretScanner } from "../secret-scanner/scanner.js";
+import { ClaudeJsonSync } from "../claude-json-sync/claude-json-sync.js";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
+import { Lockfile } from "../lockfile/lockfile.js";
 import { Logger } from "../logger.js";
-import { Lockfile } from "../lockfile.js";
 
 export interface PushOptions {
   quiet: boolean;
   skipEncryption?: boolean;
   skipSecretScan?: boolean;
   passphrase?: string;
+  only?: string;
+  dryRun?: boolean;
+  force?: boolean;
   logger?: Logger;
 }
+
+// Subdirectories within allowlisted items that should not be synced.
+// These contain downloaded third-party content that can be re-fetched.
+const SYNC_SKIP_DIRS = new Set(["plugins/cache", "plugins/marketplaces"]);
 
 export class PushCommand {
   private homeDir: string;
@@ -36,35 +45,45 @@ export class PushCommand {
 
   async execute(options: PushOptions): Promise<void> {
     const claudefyDir = join(this.homeDir, ".claudefy");
-    const lockfile = new Lockfile(join(claudefyDir, "sync.lock"), {
-      operation: "push",
-      retries: 3,
-      retryDelayMs: 1000,
-    });
     const log = options.logger;
 
     await log?.log("info", "push", "Push started");
 
-    const acquired = await lockfile.acquire();
-    if (!acquired) {
-      const msg = "Another claudefy process is running. Push skipped after retries.";
+    const lock = Lockfile.tryAcquire("push", !!options.quiet, claudefyDir);
+    if (!lock) {
+      const msg = "Another claudefy process is running. Push skipped.";
       await log?.log("warn", "push", msg);
-      throw new Error(msg);
+      if (!options.quiet) {
+        output.warn(msg);
+      }
+      return;
     }
 
     try {
-      await this.executeInner(options, log);
+      await this.executeLocked(options, claudefyDir, log);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       await log?.log("error", "push", msg);
       throw err;
     } finally {
-      await lockfile.release();
+      lock.release();
     }
   }
 
-  private async executeInner(options: PushOptions, log: Logger | undefined): Promise<void> {
+  private async executeLocked(
+    options: PushOptions,
+    claudefyDir: string,
+    log: Logger | undefined,
+  ): Promise<void> {
     const config = await this.configManager.load();
+
+    if (options.skipEncryption && config.encryption.enabled && !options.quiet) {
+      output.warn(
+        "Encryption is enabled in config but --skip-encryption flag is set.\n" +
+          "  Files will be pushed/pulled WITHOUT encryption. Use only for testing.",
+      );
+    }
+
     const syncFilterConfig = await this.configManager.getSyncFilter();
     const syncFilter = new SyncFilter(syncFilterConfig);
 
@@ -72,7 +91,20 @@ export class PushCommand {
     if (!existsSync(this.claudeDir)) {
       throw new Error(`No ${this.claudeDir} directory found. Nothing to push.`);
     }
-    const classification = await syncFilter.classify(this.claudeDir);
+    let classification = await syncFilter.classify(this.claudeDir);
+
+    if (options.only) {
+      const filtered = {
+        ...classification,
+        allowlist: classification.allowlist.filter((i) => i.name === options.only),
+        unknown: classification.unknown.filter((i) => i.name === options.only),
+      };
+      if (filtered.allowlist.length === 0 && filtered.unknown.length === 0) {
+        if (!options.quiet) output.warn(`No item matching "${options.only}" found.`);
+        return;
+      }
+      classification = filtered;
+    }
 
     const willEncrypt = config.encryption.enabled && !options.skipEncryption;
     await log?.log(
@@ -93,20 +125,68 @@ export class PushCommand {
     const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
     await gitAdapter.initStore(config.backend.url);
     await gitAdapter.ensureMachineBranch(config.machineId);
-    try {
-      await gitAdapter.pullAndMergeMain();
-    } catch (err: unknown) {
-      const detail = err instanceof Error ? err.message : String(err);
-      const msg = `Unable to pull latest changes from remote; proceeding with local state only. Detail: ${detail}`;
-      await log?.log("warn", "push", msg);
-      if (!options.quiet) {
-        output.info(msg);
+    if (!options.force) {
+      try {
+        await gitAdapter.pullAndMergeMain();
+      } catch (err: unknown) {
+        const detail = err instanceof Error ? err.message : String(err);
+        const msg = `Unable to pull latest changes from remote; proceeding with local state only. Detail: ${detail}`;
+        await log?.log("warn", "push", msg);
+        if (!options.quiet) {
+          output.info(msg);
+        }
       }
     }
 
     const storePath = gitAdapter.getStorePath();
     const configDir = join(storePath, STORE_CONFIG_DIR);
     const unknownDir = join(storePath, STORE_UNKNOWN_DIR);
+
+    // Dry-run: show what would be pushed without modifying anything
+    if (options.dryRun) {
+      const { computeDiff } = await import("../diff-utils/diff-utils.js");
+      const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
+      const tmpLocalConfig = join(this.homeDir, ".claudefy", ".dryrun-config-tmp");
+      const tmpLocalUnknown = join(this.homeDir, ".claudefy", ".dryrun-unknown-tmp");
+      if (existsSync(tmpLocalConfig)) await rmTmp(tmpLocalConfig, { recursive: true, force: true });
+      if (existsSync(tmpLocalUnknown))
+        await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
+      await mkTmp(tmpLocalConfig, { recursive: true });
+      await mkTmp(tmpLocalUnknown, { recursive: true });
+      try {
+        for (const item of classification.allowlist) {
+          const src = join(this.claudeDir, item.name);
+          if (existsSync(src)) await cp(src, join(tmpLocalConfig, item.name), { recursive: true });
+        }
+        for (const item of classification.unknown) {
+          const src = join(this.claudeDir, item.name);
+          if (existsSync(src)) await cp(src, join(tmpLocalUnknown, item.name), { recursive: true });
+        }
+        const configDiff = await computeDiff(tmpLocalConfig, configDir);
+        const unknownDiff = await computeDiff(tmpLocalUnknown, unknownDir);
+        const hasChanges = configDiff.hasChanges || unknownDiff.hasChanges;
+        if (!hasChanges) {
+          if (!options.quiet) output.info("Dry run: no push changes detected.");
+        } else {
+          if (!options.quiet) {
+            output.heading("Dry run — push would change:");
+            const allAdded = [...configDiff.added, ...unknownDiff.added];
+            const allModified = [...configDiff.modified, ...unknownDiff.modified];
+            const allDeleted = [...configDiff.deleted, ...unknownDiff.deleted];
+            for (const f of allAdded) console.log(chalk.green(`  Added:    ${f}`));
+            for (const f of allModified) console.log(chalk.yellow(`  Modified: ${f}`));
+            for (const f of allDeleted) console.log(chalk.red(`  Deleted:  ${f}`));
+          }
+          process.exitCode = 1;
+        }
+      } finally {
+        if (existsSync(tmpLocalConfig))
+          await rmTmp(tmpLocalConfig, { recursive: true, force: true });
+        if (existsSync(tmpLocalUnknown))
+          await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
+      }
+      return;
+    }
 
     // 3. Build path mapper
     const links = await this.configManager.getLinks();
@@ -138,7 +218,35 @@ export class PushCommand {
       await this.syncItem(src, unknownDir, item.name, unknownHashes, changedFiles, null);
     }
 
-    // 6. Detect deletions — remove store entries not present in source
+    // 6b. Extract syncable fields from ~/.claude.json (before deletion detection)
+    if (config.claudeJson?.sync !== false) {
+      const claudeJsonPath = join(this.homeDir, ".claude.json");
+      const claudeJsonStorePath = join(configDir, "claude-json-sync.json");
+      if (existsSync(claudeJsonPath)) {
+        const claudeJsonSync = new ClaudeJsonSync();
+        const extracted = claudeJsonSync.extract({
+          claudeJsonPath,
+          storePath: claudeJsonStorePath,
+          homeDir: this.homeDir,
+          syncMcpServers: config.claudeJson?.syncMcpServers ?? false,
+        });
+        if (Object.keys(extracted).length > 0) {
+          const newContent = JSON.stringify(extracted, null, 2);
+          // Only write if content changed — avoids unnecessary scanning/encryption
+          const existingContent = existsSync(claudeJsonStorePath)
+            ? await readFile(claudeJsonStorePath, "utf-8").catch(() => "")
+            : "";
+          if (newContent !== existingContent) {
+            await writeFile(claudeJsonStorePath, newContent);
+            changedFiles.push(claudeJsonStorePath);
+          }
+        }
+      }
+      // Protect from deletion detection — not a ~/.claude item but lives in configDir
+      syncedConfigItems.push("claude-json-sync.json");
+    }
+
+    // 6c. Detect deletions — remove store entries not present in source
     await this.removeDeleted(configDir, syncedConfigItems);
     await this.removeDeleted(unknownDir, syncedUnknownItems);
 
@@ -146,7 +254,7 @@ export class PushCommand {
     const filesToEncrypt = new Set<string>();
 
     if (!options.skipSecretScan && changedFiles.length > 0) {
-      const scanner = new SecretScanner();
+      const scanner = new SecretScanner(config.secretScanner?.customPatterns);
       const findings = await scanner.scanFiles(changedFiles);
 
       if (findings.length > 0) {
@@ -163,9 +271,17 @@ export class PushCommand {
       }
     }
 
-    // 7b. Always encrypt unknown-tier files when encryption is enabled
+    // 7b. Encrypt files based on encryption mode
     if (config.encryption.enabled && !options.skipEncryption) {
-      await this.collectFilesRecursive(unknownDir, filesToEncrypt);
+      const mode = config.encryption.mode ?? "reactive";
+      if (mode === "full") {
+        // Full mode: encrypt ALL files
+        await this.collectFilesRecursive(configDir, filesToEncrypt);
+        await this.collectFilesRecursive(unknownDir, filesToEncrypt);
+      } else {
+        // Reactive mode: only encrypt unknown-tier files
+        await this.collectFilesRecursive(unknownDir, filesToEncrypt);
+      }
     }
 
     // 7c. Perform encryption on all files that need it
@@ -191,7 +307,6 @@ export class PushCommand {
         }
       }
 
-      await log?.log("info", "push", `Encrypted ${filesToEncrypt.size} file(s)`);
       if (!options.quiet) {
         output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
       }
@@ -207,6 +322,8 @@ export class PushCommand {
       `sync: push from ${config.machineId}`,
       config.machineId,
     );
+
+    await log?.log("info", "push", `Encrypted ${filesToEncrypt.size} file(s)`);
 
     if (commitResult.committed && !commitResult.pushed) {
       await log?.log("warn", "push", "Changes committed locally but push to remote failed");
@@ -358,6 +475,9 @@ export class PushCommand {
     changedFiles: string[],
     pathMapper: PathMapper | null,
   ): Promise<void> {
+    // Skip non-syncable subdirectories (downloaded caches, re-fetchable content)
+    if (SYNC_SKIP_DIRS.has(itemName)) return;
+
     const destDir = join(destBaseDir, itemName);
     await mkdir(destDir, { recursive: true });
     const entries = await readdir(srcDir, { withFileTypes: true });

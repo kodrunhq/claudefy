@@ -40,8 +40,6 @@ describe("DoctorCommand", () => {
         version: 1,
         backend: { type: "git", url: "https://example.com/repo.git" },
         encryption: { enabled: true, useKeychain: false, cacheDuration: "0" },
-        sync: { lfsThreshold: 524288 },
-        filter: {},
         machineId: "test-machine",
       }),
     );
@@ -61,8 +59,6 @@ describe("DoctorCommand", () => {
         version: 1,
         backend: { type: "git", url: "https://example.com/repo.git" },
         encryption: { enabled: true, useKeychain: false, cacheDuration: "0" },
-        sync: { lfsThreshold: 524288 },
-        filter: {},
         machineId: "test-machine",
       }),
     );
@@ -72,7 +68,7 @@ describe("DoctorCommand", () => {
     const encCheck = checks.find((c) => c.name === "encryption");
     expect(encCheck).toBeDefined();
     expect(encCheck!.status).toBe("pass");
-    expect(encCheck!.detail).toContain("enabled");
+    expect(encCheck!.detail).toContain("Enabled");
   });
 
   it("reports recent-sync pass when log has no errors", async () => {
@@ -84,8 +80,6 @@ describe("DoctorCommand", () => {
         version: 1,
         backend: { type: "git", url: "https://example.com/repo.git" },
         encryption: { enabled: false, useKeychain: false, cacheDuration: "0" },
-        sync: { lfsThreshold: 524288 },
-        filter: {},
         machineId: "test-machine",
       }),
     );
@@ -113,8 +107,6 @@ describe("DoctorCommand", () => {
         version: 1,
         backend: { type: "git", url: "https://example.com/repo.git" },
         encryption: { enabled: false, useKeychain: false, cacheDuration: "0" },
-        sync: { lfsThreshold: 524288 },
-        filter: {},
         machineId: "test-machine",
       }),
     );

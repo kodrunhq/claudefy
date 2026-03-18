@@ -1,4 +1,8 @@
-import type { SyncFilterConfig } from "./types.js";
+import type { ClaudefyConfig, SyncFilterConfig } from "./types.js";
+
+export const DEFAULT_SECRET_SCANNER: ClaudefyConfig["secretScanner"] = {
+  customPatterns: [],
+};
 
 export const DEFAULT_SYNC_FILTER: SyncFilterConfig = {
   allowlist: [
@@ -14,6 +18,8 @@ export const DEFAULT_SYNC_FILTER: SyncFilterConfig = {
     "settings.json",
     "history.jsonl",
     "package.json",
+    "CLAUDE.md",
+    "MEMORY.md",
   ],
   denylist: [
     "cache",
@@ -25,7 +31,24 @@ export const DEFAULT_SYNC_FILTER: SyncFilterConfig = {
     "tasks",
     ".credentials.json",
     "mcp-needs-auth-cache.json",
+    "settings.local.json",
+    "statsig",
+    "telemetry",
+    "ide",
+    "debug",
+    "todos",
+    "stats-cache.json",
   ],
+};
+
+export const DEFAULT_BACKUPS = {
+  maxCount: 10,
+  maxAgeDays: 30,
+};
+
+export const DEFAULT_CLAUDE_JSON: ClaudefyConfig["claudeJson"] = {
+  sync: true,
+  syncMcpServers: false,
 };
 
 export const STORE_CONFIG_DIR = "config";

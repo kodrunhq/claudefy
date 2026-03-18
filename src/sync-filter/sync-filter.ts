@@ -5,7 +5,7 @@ import type { SyncTier, ClassifiedItem, ClassificationResult } from "./types.js"
 
 // Items that are always denied regardless of user configuration.
 // These contain sensitive credentials and must never be synced.
-const HARDCODED_DENYLIST = [".credentials.json"];
+const HARDCODED_DENYLIST = [".credentials.json", "settings.local.json"];
 
 export class SyncFilter {
   private config: SyncFilterConfig;

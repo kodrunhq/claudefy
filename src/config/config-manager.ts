@@ -43,6 +43,7 @@ export class ConfigManager {
         enabled: true,
         useKeychain: options?.useKeychain ?? false,
         cacheDuration: "0",
+        mode: "reactive" as const,
       },
       machineId,
     };
@@ -89,9 +90,6 @@ export class ConfigManager {
     }
     for (let i = 0; i < parts.length - 1; i++) {
       const segment = parts[i];
-      if (FORBIDDEN_KEYS.includes(segment)) {
-        throw new Error(`Forbidden config key segment: "${segment}"`);
-      }
       const next = (obj as Record<string, unknown>)[segment];
       if (isUnsafeObject(next)) {
         throw new Error(`Invalid config key: "${key}" — "${segment}" is not a safe object`);
@@ -99,9 +97,6 @@ export class ConfigManager {
       obj = next as Record<string, unknown>;
     }
     const lastSegment = parts[parts.length - 1];
-    if (FORBIDDEN_KEYS.includes(lastSegment)) {
-      throw new Error(`Forbidden config key segment: "${lastSegment}"`);
-    }
     if (isUnsafeObject(obj)) {
       throw new Error("Cannot assign to unsafe configuration object");
     }

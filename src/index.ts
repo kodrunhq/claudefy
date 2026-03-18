@@ -7,7 +7,8 @@ import { program } from "./cli.js";
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as { name: string; version: string };
 
-// Non-blocking update check (cached for 1 day)
+// Non-blocking update check (cached for 1 day).
+// Suppressed in quiet mode (-q/--quiet) to avoid unwanted output.
 const isQuiet = process.argv.includes("-q") || process.argv.includes("--quiet");
 
 if (process.stdout.isTTY && !isQuiet) {

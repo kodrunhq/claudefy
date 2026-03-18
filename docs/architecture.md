@@ -169,3 +169,10 @@ CLI (commander)
      ├─ HookManager
      └─ RepoCreator (gh / glab CLI)
 ```
+
+## Output Streams
+
+- `output.success`, `output.info`, `output.dim`, `output.heading` → stdout
+- `output.warn`, `output.error` → stderr
+
+This follows Unix convention. Pipe `2>/dev/null` to suppress warnings.

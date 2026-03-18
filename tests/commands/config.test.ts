@@ -59,6 +59,16 @@ describe("ConfigCommand", () => {
     expect(result).toBe(false);
   });
 
+  it("rejects invalid type for known config key", async () => {
+    const cmd = new ConfigCommand(homeDir);
+    await expect(cmd.set("encryption.enabled", "banana")).rejects.toThrow(/expects boolean/);
+  });
+
+  it("rejects invalid enum value", async () => {
+    const cmd = new ConfigCommand(homeDir);
+    await expect(cmd.set("encryption.mode", "turbo")).rejects.toThrow(/must be one of/);
+  });
+
   it("throws when not initialized", async () => {
     const emptyHome = await mkdtemp(join(tmpdir(), "claudefy-config-empty-"));
     const cmd = new ConfigCommand(emptyHome);

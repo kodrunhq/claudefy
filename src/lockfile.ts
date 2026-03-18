@@ -106,6 +106,9 @@ export class Lockfile {
       if (err instanceof SyntaxError) {
         return null; // Corrupted JSON
       }
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        return null; // Lockfile deleted between existsSync() and readFile()
+      }
       // I/O errors (EACCES, EMFILE, etc.) — treat as "lock exists, can't read"
       // so we don't steal it. Return a synthetic entry with current PID to prevent overwrite.
       return { pid: process.pid, timestamp: new Date().toISOString(), operation: "unknown" };
