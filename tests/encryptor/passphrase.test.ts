@@ -95,17 +95,17 @@ describe("storePassphraseInKeychain", () => {
     mockSetPassword.mockReset();
   });
 
-  it("stores passphrase and returns true", () => {
+  it("stores passphrase and returns true", async () => {
     mockSetPassword.mockReturnValue(undefined);
-    expect(storePassphraseInKeychain("my-pass")).toBe(true);
+    expect(await storePassphraseInKeychain("my-pass")).toBe(true);
     expect(mockSetPassword).toHaveBeenCalledWith("my-pass");
   });
 
-  it("returns false when keychain throws", () => {
+  it("returns false when keychain throws", async () => {
     mockSetPassword.mockImplementation(() => {
       throw new Error("no keychain");
     });
-    expect(storePassphraseInKeychain("my-pass")).toBe(false);
+    expect(await storePassphraseInKeychain("my-pass")).toBe(false);
   });
 });
 
@@ -114,15 +114,15 @@ describe("isKeychainAvailable", () => {
     mockGetPassword.mockReset();
   });
 
-  it("returns true when keychain is accessible", () => {
+  it("returns true when keychain is accessible", async () => {
     mockGetPassword.mockReturnValue(null);
-    expect(isKeychainAvailable()).toBe(true);
+    expect(await isKeychainAvailable()).toBe(true);
   });
 
-  it("returns false when keychain throws", () => {
+  it("returns false when keychain throws", async () => {
     mockGetPassword.mockImplementation(() => {
       throw new Error("no D-Bus");
     });
-    expect(isKeychainAvailable()).toBe(false);
+    expect(await isKeychainAvailable()).toBe(false);
   });
 });
