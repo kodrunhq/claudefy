@@ -1,9 +1,19 @@
 import { env } from "node:process";
 import { createInterface } from "node:readline";
-import { Entry } from "@napi-rs/keyring";
 
 const KEYRING_SERVICE = "claudefy";
 const KEYRING_ACCOUNT = "passphrase";
+
+type EntryType = import("@napi-rs/keyring").Entry;
+
+async function getEntry(): Promise<EntryType | null> {
+  try {
+    const { Entry } = await import("@napi-rs/keyring");
+    return new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
+  } catch {
+    return null;
+  }
+}
 
 export type PassphraseSource = "env" | "keychain" | "prompt" | "none";
 
@@ -20,8 +30,8 @@ export async function resolvePassphrase(useKeychain: boolean): Promise<Passphras
 
   if (useKeychain) {
     try {
-      const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
-      const stored = entry.getPassword();
+      const entry = await getEntry();
+      const stored = entry?.getPassword();
       if (stored) {
         return { passphrase: stored, source: "keychain" };
       }
@@ -33,9 +43,10 @@ export async function resolvePassphrase(useKeychain: boolean): Promise<Passphras
   return null;
 }
 
-export function storePassphraseInKeychain(passphrase: string): boolean {
+export async function storePassphraseInKeychain(passphrase: string): Promise<boolean> {
   try {
-    const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
+    const entry = await getEntry();
+    if (!entry) return false;
     entry.setPassword(passphrase);
     return true;
   } catch {
@@ -43,9 +54,10 @@ export function storePassphraseInKeychain(passphrase: string): boolean {
   }
 }
 
-export function isKeychainAvailable(): boolean {
+export async function isKeychainAvailable(): Promise<boolean> {
   try {
-    const entry = new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT);
+    const entry = await getEntry();
+    if (!entry) return false;
     // Try a read — if the backend is unavailable this throws
     entry.getPassword();
     return true;
@@ -99,10 +111,10 @@ export interface PassphraseSetupResult {
 }
 
 async function offerKeychainStorage(passphrase: string): Promise<boolean> {
-  if (isKeychainAvailable()) {
+  if (await isKeychainAvailable()) {
     const storeIt = await promptYesNo("Store passphrase in OS keychain?");
     if (storeIt) {
-      return storePassphraseInKeychain(passphrase);
+      return await storePassphraseInKeychain(passphrase);
     }
   }
   return false;

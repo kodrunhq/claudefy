@@ -97,7 +97,7 @@ export class RotatePassphraseCommand {
 
       // Update keychain if enabled
       if (config.encryption.useKeychain) {
-        const stored = storePassphraseInKeychain(newPass);
+        const stored = await storePassphraseInKeychain(newPass);
         if (stored) {
           if (!options.quiet) output.info("Keychain updated.");
         } else {
