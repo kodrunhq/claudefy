@@ -17,9 +17,16 @@ export class LineEncryptor {
   }
 
   decryptLine(encoded: string, ad: string): string {
+    if (encoded === "") return "";
     const adBytes = new TextEncoder().encode(ad);
     const cipher = aessiv(this.key, adBytes);
     const encrypted = new Uint8Array(Buffer.from(encoded, "base64"));
+    if (encrypted.length < 16) {
+      throw new Error(
+        `Invalid ciphertext on line: expected at least 16 bytes but got ${encrypted.length}. ` +
+          `Line may not be encrypted or may be corrupted (ad="${ad}")`,
+      );
+    }
     const decrypted = cipher.decrypt(encrypted);
     return new TextDecoder().decode(decrypted);
   }

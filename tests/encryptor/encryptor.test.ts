@@ -144,6 +144,50 @@ describe("Encryptor", () => {
     expect(() => Buffer.from(encrypted, "base64")).not.toThrow();
   });
 
+  it("decryptDirectory skips .age files with content too short to be valid ciphertext", async () => {
+    const encryptor = new Encryptor(passphrase, "test-repo");
+
+    // Simulate a pre-existing .age file from ~/.claude that was synced as-is
+    // (never encrypted by claudefy — contains plain text, not ciphertext)
+    await writeFile(join(tempDir, "pre-existing.txt.age"), "not encrypted content");
+
+    // Also add a properly encrypted file alongside it
+    const realFile = join(tempDir, "real.txt");
+    await writeFile(realFile, "properly encrypted content");
+    await encryptor.encryptDirectory(tempDir);
+
+    // Now sneak in the bad .age file again (encryptDirectory would have skipped it
+    // since it already has .age extension, but let's simulate the store state)
+    await writeFile(join(tempDir, "bad-file.json.age"), "short");
+
+    // decryptDirectory should NOT crash — it should skip invalid .age files
+    await expect(encryptor.decryptDirectory(tempDir)).resolves.not.toThrow();
+
+    // The properly encrypted file should have been decrypted
+    expect(existsSync(join(tempDir, "real.txt"))).toBe(true);
+    expect(await readFile(join(tempDir, "real.txt"), "utf-8")).toBe("properly encrypted content");
+  });
+
+  it("decryptDirectory skips empty .age files", async () => {
+    const encryptor = new Encryptor(passphrase, "test-repo");
+
+    // Empty .age file (0 bytes)
+    await writeFile(join(tempDir, "empty.json.age"), "");
+
+    // Should not crash
+    await expect(encryptor.decryptDirectory(tempDir)).resolves.not.toThrow();
+  });
+
+  it("decryptDirectory skips empty non-JSONL .age files", async () => {
+    const encryptor = new Encryptor(passphrase, "test-repo");
+
+    // Empty non-JSONL .age file
+    await writeFile(join(tempDir, "empty.txt.age"), "");
+
+    // Should not crash (FileEncryptor.decrypt has no empty guard unlike LineEncryptor)
+    await expect(encryptor.decryptDirectory(tempDir)).resolves.not.toThrow();
+  });
+
   it("round-trips .jsonl files through encrypt/decrypt", async () => {
     const encryptor = new Encryptor(passphrase, "test-repo");
     const jsonlContent = '{"a":1}\n{"b":2}\n{"c":3}\n';

@@ -130,4 +130,17 @@ describe("FileEncryptor", () => {
     const encrypted = encryptor.encrypt(data, "config/real-path.json");
     expect(() => encryptor.decrypt(encrypted, "config/swapped-path.json")).toThrow();
   });
+
+  it("decrypt returns empty Uint8Array for empty/whitespace input", () => {
+    const encryptor = new FileEncryptor(passphrase, "test-repo");
+    expect(encryptor.decrypt("", "ad")).toEqual(new Uint8Array(0));
+    expect(encryptor.decrypt("  ", "ad")).toEqual(new Uint8Array(0));
+    expect(encryptor.decrypt("\n", "ad")).toEqual(new Uint8Array(0));
+  });
+
+  it("decrypt throws descriptive error for short non-empty ciphertext", () => {
+    const encryptor = new FileEncryptor(passphrase, "test-repo");
+    // "hello" base64-decodes to 3 bytes, which is < 16
+    expect(() => encryptor.decrypt("hello", "test-file")).toThrow(/Invalid ciphertext/);
+  });
 });
