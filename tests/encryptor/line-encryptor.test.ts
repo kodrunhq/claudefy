@@ -197,4 +197,16 @@ describe("LineEncryptor", () => {
       expect(() => enc.decryptLine(encrypted, "config/swapped-path.jsonl")).toThrow();
     });
   });
+
+  describe("short ciphertext handling", () => {
+    it("decryptLine returns empty string for empty input", () => {
+      const enc = new LineEncryptor(passphrase, "test-repo");
+      expect(enc.decryptLine("", "ad")).toBe("");
+    });
+
+    it("decryptLine throws descriptive error for short non-empty input", () => {
+      const enc = new LineEncryptor(passphrase, "test-repo");
+      expect(() => enc.decryptLine("short", "ad")).toThrow(/Invalid ciphertext/);
+    });
+  });
 });

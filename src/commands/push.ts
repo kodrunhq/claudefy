@@ -455,6 +455,11 @@ export class PushCommand {
         await writeFile(destPath, content);
         changedFiles.push(destPath);
       }
+      // Remove stale .age file when plaintext is written
+      const staleAgePath = join(destBaseDir, itemName + ".age");
+      if (existsSync(staleAgePath)) {
+        await rm(staleAgePath);
+      }
     } else if (srcStat.isDirectory()) {
       await this.syncDirectory(
         srcPath,
@@ -542,6 +547,12 @@ export class PushCommand {
           await mkdir(join(destPath, ".."), { recursive: true });
           await writeFile(destPath, content);
           changedFiles.push(destPath);
+        }
+        // Remove stale .age file when plaintext is written (prevents
+        // decryptDirectory from finding outdated encrypted versions)
+        const staleAgePath = join(destBaseDir, childName + ".age");
+        if (existsSync(staleAgePath)) {
+          await rm(staleAgePath);
         }
       }
     }

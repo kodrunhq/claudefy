@@ -34,6 +34,10 @@ export class Encryptor {
 
   async decryptFile(inputPath: string, outputPath: string, ad: string): Promise<void> {
     const content = await readFile(inputPath, "utf-8");
+    if (content.trim() === "") {
+      await writeFile(outputPath, "");
+      return;
+    }
     if (this.isOriginallyJsonl(inputPath)) {
       const decrypted = this.lineEncryptor.decryptFileContent(content, ad);
       await writeFile(outputPath, decrypted);
@@ -84,8 +88,15 @@ export class Encryptor {
       } else if (entry.name.endsWith(".age")) {
         const outputPath = fullPath.replace(/\.age$/, "");
         const ad = relative(rootPath, outputPath).split(sep).join("/");
-        await this.decryptFile(fullPath, outputPath, ad);
-        await rm(fullPath);
+        try {
+          await this.decryptFile(fullPath, outputPath, ad);
+          await rm(fullPath);
+        } catch {
+          // Skip files that cannot be decrypted (e.g. pre-existing .age files
+          // from ~/.claude that were synced as-is, or corrupted/stale .age files).
+          // Remove the invalid .age file so it doesn't block future operations.
+          await rm(fullPath);
+        }
       }
     }
   }

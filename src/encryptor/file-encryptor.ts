@@ -16,9 +16,16 @@ export class FileEncryptor {
   }
 
   decrypt(encoded: string, ad: string): Uint8Array {
+    if (encoded.trim() === "") return new Uint8Array(0);
     const adBytes = new TextEncoder().encode(ad);
     const cipher = aessiv(this.key, adBytes);
     const encrypted = new Uint8Array(Buffer.from(encoded, "base64"));
+    if (encrypted.length < 16) {
+      throw new Error(
+        `Invalid ciphertext: expected at least 16 bytes but got ${encrypted.length}. ` +
+          `File may not be encrypted or may be corrupted (ad="${ad}")`,
+      );
+    }
     return cipher.decrypt(encrypted);
   }
 
