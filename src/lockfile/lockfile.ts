@@ -43,24 +43,35 @@ export class Lockfile {
     if (existsSync(lockPath)) {
       try {
         const raw = readFileSync(lockPath, "utf-8");
-        const info: LockInfo = JSON.parse(raw);
-        const age = Date.now() - new Date(info.startedAt).getTime();
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          parsed === null ||
+          typeof parsed !== "object" ||
+          typeof (parsed as Record<string, unknown>)["pid"] !== "number" ||
+          typeof (parsed as Record<string, unknown>)["startedAt"] !== "string"
+        ) {
+          // Invalid or corrupt lockfile — remove it and fall through to acquire a new lock
+          unlinkSync(lockPath);
+        } else {
+          const info: LockInfo = parsed as LockInfo;
+          const age = Date.now() - new Date(info.startedAt).getTime();
 
-        if (isPidAlive(info.pid) && age < MAX_LOCK_AGE_MS) {
-          if (info.pid === process.pid) {
-            // Re-entrant: same process already holds the lock
-            return new Lockfile(lockPath, true);
+          if (isPidAlive(info.pid) && age < MAX_LOCK_AGE_MS) {
+            if (info.pid === process.pid) {
+              // Re-entrant: same process already holds the lock
+              return new Lockfile(lockPath, true);
+            }
+            if (!quiet) {
+              output.info(
+                `Another claudefy operation is in progress (PID ${info.pid}, ${info.command}). Skipping.\n` +
+                  `  If this is wrong, delete ${lockPath} and retry.`,
+              );
+            }
+            return null;
           }
-          if (!quiet) {
-            output.info(
-              `Another claudefy operation is in progress (PID ${info.pid}, ${info.command}). Skipping.\n` +
-                `  If this is wrong, delete ${lockPath} and retry.`,
-            );
-          }
-          return null;
+
+          unlinkSync(lockPath);
         }
-
-        unlinkSync(lockPath);
       } catch {
         try {
           unlinkSync(lockPath);
@@ -107,9 +118,18 @@ export async function withLock(
   quiet: boolean,
   claudefyDir: string,
   fn: () => Promise<void>,
+  options?: { critical?: boolean },
 ): Promise<void> {
   const lock = Lockfile.tryAcquire(command, quiet, claudefyDir);
-  if (!lock) return;
+  if (!lock) {
+    if (options?.critical) {
+      throw new Error(
+        `Cannot run '${command}' — another claudefy operation is already in progress. ` +
+          `Delete ${claudefyDir}/.lock and retry if this is incorrect.`,
+      );
+    }
+    return;
+  }
   try {
     await fn();
   } finally {

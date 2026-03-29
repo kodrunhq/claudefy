@@ -37,13 +37,28 @@ const SECRET_PATTERNS: SecretPattern[] = [
   { name: "Azure Connection String", regex: /AccountKey=[A-Za-z0-9+/=]{44,}/ },
   { name: "Twilio API Key", regex: /\bSK[0-9a-fA-F]{32}\b/ },
   { name: "Datadog API Key", regex: /\b(?:ddapi|ddog|dd)_[0-9a-zA-Z]{32,}\b/ },
+  // env / shell / YAML / JS formats
+  {
+    name: "Env-style Secret",
+    regex:
+      /^(?:export\s+)?[A-Z_]{3,}(?:SECRET|PASSWORD|TOKEN|API_KEY|APIKEY|PRIVATE_KEY)\s*=\s*.{8,}/m,
+  },
+  {
+    name: "YAML Secret",
+    regex: /^[ \t]*(?:secret|password|api_key|apiKey|private_key)\s*:\s*['"]?[^'"\s]{8,}/m,
+  },
+  {
+    name: "JS/TS Secret Assignment",
+    regex:
+      /(?:const|let|var)\s+(?:secret|password|token|apiKey|api_key|privateKey)\s*=\s*['"`][^'"`]{8,}/,
+  },
 ];
 
 export class SecretScanner {
   private readonly patterns: SecretPattern[];
 
-  constructor(customPatterns: CustomPattern[] = []) {
-    const custom = customPatterns.map((p) => {
+  constructor(customPatterns?: CustomPattern[]) {
+    const custom = (customPatterns ?? []).map((p) => {
       try {
         return { name: p.name, regex: new RegExp(p.regex, p.flags) };
       } catch (e) {

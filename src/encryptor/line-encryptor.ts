@@ -32,11 +32,11 @@ export class LineEncryptor {
   }
 
   encryptLines(lines: string[], ad: string): string[] {
-    return lines.map((line) => this.encryptLine(line, ad));
+    return lines.map((line, lineIndex) => this.encryptLine(line, `${ad}:${lineIndex}`));
   }
 
   decryptLines(encrypted: string[], ad: string): string[] {
-    return encrypted.map((line) => this.decryptLine(line, ad));
+    return encrypted.map((line, lineIndex) => this.decryptLine(line, `${ad}:${lineIndex}`));
   }
 
   encryptFileContent(content: string, ad: string): string {

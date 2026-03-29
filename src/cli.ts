@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import chalk from "chalk";
-import { output } from "./output.js";
+import { output, redactUrl } from "./output.js";
+import type { PackageJson } from "./types.js";
 import { resolvePassphrase } from "./encryptor/passphrase.js";
 import { Logger } from "./logger.js";
 import type { ReadRecentFilter } from "./logger.js";
@@ -17,7 +18,7 @@ function stripAnsi(str: string): string {
 }
 
 const require = createRequire(import.meta.url);
-const pkg = require("../package.json") as { version: string };
+const pkg = require("../package.json") as PackageJson;
 
 const program = new Command();
 const homeDir = homedir();
@@ -188,12 +189,34 @@ program
 program
   .command("status")
   .description("Show diff between local and remote")
-  .action(async function (this: Command) {
+  .option("--json", "Output raw JSON")
+  .action(async function (this: Command, options) {
     try {
       const { StatusCommand } = await import("./commands/status.js");
       const cmd = new StatusCommand(homeDir);
       const result = await cmd.execute();
-      console.log(JSON.stringify(result, null, 2));
+      if (options.json) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+      }
+      if (!result.initialized) {
+        output.warn("claudefy is not initialized. Run 'claudefy init' first.");
+        return;
+      }
+      output.heading("claudefy status");
+      output.dim("─────────────────────────────────");
+      output.info(`Machine:   ${result.machineId ?? "unknown"}`);
+      output.info(`Backend:   ${result.backendUrl ? redactUrl(result.backendUrl) : "unknown"}`);
+      output.dim("─────────────────────────────────");
+      output.info(
+        `Synced     (${result.syncedFiles.length}): ${result.syncedFiles.join(", ") || "none"}`,
+      );
+      output.info(
+        `Denied     (${result.deniedFiles.length}): ${result.deniedFiles.join(", ") || "none"}`,
+      );
+      output.info(
+        `Unknown    (${result.unknownFiles.length}): ${result.unknownFiles.join(", ") || "none"}`,
+      );
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -334,7 +357,24 @@ configCmd
       const { ConfigCommand } = await import("./commands/config.js");
       const cmd = new ConfigCommand(homeDir);
       const result = await cmd.get(key);
-      console.log(typeof result === "object" ? JSON.stringify(result, null, 2) : String(result));
+      if (typeof result === "object" && result !== null) {
+        // Redact any URL fields before printing
+        const safe = JSON.parse(JSON.stringify(result)) as Record<string, unknown>;
+        if (
+          safe["backend"] &&
+          typeof safe["backend"] === "object" &&
+          typeof (safe["backend"] as Record<string, unknown>)["url"] === "string"
+        ) {
+          (safe["backend"] as Record<string, unknown>)["url"] = redactUrl(
+            (safe["backend"] as Record<string, unknown>)["url"] as string,
+          );
+        }
+        console.log(JSON.stringify(safe, null, 2));
+      } else if (typeof result === "string" && (key === "backend.url" || key === "backend")) {
+        console.log(redactUrl(result));
+      } else {
+        console.log(String(result));
+      }
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -427,6 +467,7 @@ hooksCmd
       const { HooksCommand } = await import("./commands/hooks.js");
       const cmd = new HooksCommand(homeDir);
       await cmd.install();
+      output.success("Hooks installed successfully.");
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);
@@ -456,6 +497,7 @@ hooksCmd
       const { HooksCommand } = await import("./commands/hooks.js");
       const cmd = new HooksCommand(homeDir);
       await cmd.remove();
+      output.success("Hooks removed successfully.");
     } catch (err: unknown) {
       output.error(err instanceof Error ? err.message : String(err));
       process.exit(1);

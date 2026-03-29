@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import { ConfigManager } from "../config/config-manager.js";
 import { Logger } from "../logger.js";
+import { redactUrl } from "../output.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -82,11 +83,16 @@ export class DoctorCommand {
   }
 
   private async checkRemote(url: string): Promise<DoctorCheck> {
+    const safeUrl = redactUrl(url);
     try {
       await execFileAsync("git", ["ls-remote", url], { timeout: 10000 });
-      return { name: "remote-reachable", status: "pass", detail: `remote ${url} is reachable` };
+      return { name: "remote-reachable", status: "pass", detail: `remote ${safeUrl} is reachable` };
     } catch {
-      return { name: "remote-reachable", status: "fail", detail: `Cannot reach remote: ${url}` };
+      return {
+        name: "remote-reachable",
+        status: "fail",
+        detail: `Cannot reach remote: ${safeUrl}`,
+      };
     }
   }
 

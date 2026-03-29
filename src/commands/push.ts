@@ -1,11 +1,11 @@
-import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
-import chalk from "chalk";
 import { ConfigManager } from "../config/config-manager.js";
 import { SyncFilter } from "../sync-filter/sync-filter.js";
+import type { ClassificationResult } from "../sync-filter/types.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PathMapper } from "../path-mapper/path-mapper.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
@@ -31,6 +31,17 @@ export interface PushOptions {
 // Subdirectories within allowlisted items that should not be synced.
 // These contain downloaded third-party content that can be re-fetched.
 const SYNC_SKIP_DIRS = new Set(["plugins/cache", "plugins/marketplaces"]);
+
+// Registry of items that require path normalization before storing in the remote.
+// Keys are item names as passed to normalizeContent/needsNormalization.
+// Values are the type of normalization to apply.
+type NormalizerType = "settings" | "plugins" | "jsonl";
+const NORMALIZERS: Record<string, NormalizerType> = {
+  "settings.json": "settings",
+  "history.jsonl": "jsonl",
+  "plugins/installed_plugins.json": "plugins",
+  "plugins/known_marketplaces.json": "plugins",
+};
 
 export class PushCommand {
   private homeDir: string;
@@ -81,6 +92,18 @@ export class PushCommand {
       output.warn(
         "Encryption is enabled in config but --skip-encryption flag is set.\n" +
           "  Files will be pushed/pulled WITHOUT encryption. Use only for testing.",
+      );
+    }
+
+    // Warn when skipping secret scan in reactive encryption mode — secrets will not be encrypted
+    if (
+      options.skipSecretScan &&
+      config.encryption.enabled &&
+      (config.encryption.mode === "reactive" || config.encryption.mode == null)
+    ) {
+      output.warn(
+        "WARNING: --skip-secret-scan is set while encryption.mode is reactive.\n" +
+          "  Secret detection drives reactive encryption — files with secrets will NOT be encrypted.",
       );
     }
 
@@ -144,47 +167,7 @@ export class PushCommand {
 
     // Dry-run: show what would be pushed without modifying anything
     if (options.dryRun) {
-      const { computeDiff } = await import("../diff-utils/diff-utils.js");
-      const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
-      const tmpLocalConfig = join(this.homeDir, ".claudefy", ".dryrun-config-tmp");
-      const tmpLocalUnknown = join(this.homeDir, ".claudefy", ".dryrun-unknown-tmp");
-      if (existsSync(tmpLocalConfig)) await rmTmp(tmpLocalConfig, { recursive: true, force: true });
-      if (existsSync(tmpLocalUnknown))
-        await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
-      await mkTmp(tmpLocalConfig, { recursive: true });
-      await mkTmp(tmpLocalUnknown, { recursive: true });
-      try {
-        for (const item of classification.allowlist) {
-          const src = join(this.claudeDir, item.name);
-          if (existsSync(src)) await cp(src, join(tmpLocalConfig, item.name), { recursive: true });
-        }
-        for (const item of classification.unknown) {
-          const src = join(this.claudeDir, item.name);
-          if (existsSync(src)) await cp(src, join(tmpLocalUnknown, item.name), { recursive: true });
-        }
-        const configDiff = await computeDiff(tmpLocalConfig, configDir);
-        const unknownDiff = await computeDiff(tmpLocalUnknown, unknownDir);
-        const hasChanges = configDiff.hasChanges || unknownDiff.hasChanges;
-        if (!hasChanges) {
-          if (!options.quiet) output.info("Dry run: no push changes detected.");
-        } else {
-          if (!options.quiet) {
-            output.heading("Dry run — push would change:");
-            const allAdded = [...configDiff.added, ...unknownDiff.added];
-            const allModified = [...configDiff.modified, ...unknownDiff.modified];
-            const allDeleted = [...configDiff.deleted, ...unknownDiff.deleted];
-            for (const f of allAdded) console.log(chalk.green(`  Added:    ${f}`));
-            for (const f of allModified) console.log(chalk.yellow(`  Modified: ${f}`));
-            for (const f of allDeleted) console.log(chalk.red(`  Deleted:  ${f}`));
-          }
-          process.exitCode = 1;
-        }
-      } finally {
-        if (existsSync(tmpLocalConfig))
-          await rmTmp(tmpLocalConfig, { recursive: true, force: true });
-        if (existsSync(tmpLocalUnknown))
-          await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
-      }
+      await this.executePushDryRun(options, classification, configDir, unknownDir);
       return;
     }
 
@@ -293,6 +276,7 @@ export class PushCommand {
       }
 
       const encryptor = new Encryptor(options.passphrase, config.backend.url);
+      let encryptedCount = 0;
       for (const filePath of filesToEncrypt) {
         if (existsSync(filePath) && !filePath.endsWith(".age")) {
           const ad = (
@@ -304,11 +288,12 @@ export class PushCommand {
             .join("/");
           await encryptor.encryptFile(filePath, filePath + ".age", ad);
           await rm(filePath);
+          encryptedCount++;
         }
       }
 
       if (!options.quiet) {
-        output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
+        output.info(`Encrypted ${encryptedCount} file(s).`);
       }
     }
 
@@ -326,21 +311,29 @@ export class PushCommand {
     await log?.log("info", "push", `Encrypted ${filesToEncrypt.size} file(s)`);
 
     if (commitResult.committed && !commitResult.pushed) {
-      await log?.log("warn", "push", "Changes committed locally but push to remote failed");
+      const detail = commitResult.pushError ? ` (${commitResult.pushError})` : "";
+      await log?.log(
+        "warn",
+        "push",
+        `Changes committed locally but push to remote failed${detail}`,
+      );
       if (!options.quiet) {
         output.warn(
-          "Changes were committed locally, but pushing to the remote failed. Retry with 'claudefy push'.",
+          `Changes were committed locally, but pushing to the remote failed${detail}. Retry with 'claudefy push'.`,
         );
       }
     }
     if (commitResult.pushed && !commitResult.mergedToMain) {
+      const detail = commitResult.mergeError ? ` (${commitResult.mergeError})` : "";
       await log?.log(
         "warn",
         "push",
-        "Pushed but merge to main failed — may need conflict resolution",
+        `Pushed but merge to main failed — may need conflict resolution${detail}`,
       );
       if (!options.quiet) {
-        output.warn("Unable to merge machine branch into main. You may need to resolve conflicts.");
+        output.warn(
+          `Unable to merge machine branch into main. You may need to resolve conflicts${detail}.`,
+        );
       }
     }
 
@@ -384,15 +377,12 @@ export class PushCommand {
   }
 
   private needsNormalization(itemName: string): boolean {
-    return (
-      ["settings.json", "history.jsonl"].includes(itemName) ||
-      itemName === "plugins/installed_plugins.json" ||
-      itemName === "plugins/known_marketplaces.json"
-    );
+    return Object.prototype.hasOwnProperty.call(NORMALIZERS, itemName);
   }
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
-    if (itemName === "settings.json") {
+    const normalizerType = NORMALIZERS[itemName];
+    if (normalizerType === "settings") {
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(text);
@@ -402,10 +392,7 @@ export class PushCommand {
       const normalized = pathMapper.normalizeSettingsPaths(parsed, this.claudeDir);
       return JSON.stringify(normalized, null, 2);
     }
-    if (
-      itemName === "plugins/installed_plugins.json" ||
-      itemName === "plugins/known_marketplaces.json"
-    ) {
+    if (normalizerType === "plugins") {
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
@@ -415,7 +402,7 @@ export class PushCommand {
       const normalized = pathMapper.normalizePluginPaths(parsed, this.claudeDir);
       return JSON.stringify(normalized, null, 2);
     }
-    if (itemName === "history.jsonl") {
+    if (normalizerType === "jsonl") {
       return (
         text
           .split("\n")
@@ -592,6 +579,53 @@ export class PushCommand {
       if (!currentSet.has(baseName) && !currentSet.has(entry)) {
         await rm(join(storeDir, entry), { recursive: true });
       }
+    }
+  }
+
+  private async executePushDryRun(
+    options: PushOptions,
+    classification: ClassificationResult,
+    configDir: string,
+    unknownDir: string,
+  ): Promise<void> {
+    const { computeDiff, printDiffLines } = await import("../diff-utils/diff-utils.js");
+    const claudefyDir = join(this.homeDir, ".claudefy");
+    const tmpLocalConfig = join(claudefyDir, ".dryrun-config-tmp");
+    const tmpLocalUnknown = join(claudefyDir, ".dryrun-unknown-tmp");
+    if (existsSync(tmpLocalConfig)) await rm(tmpLocalConfig, { recursive: true, force: true });
+    if (existsSync(tmpLocalUnknown)) await rm(tmpLocalUnknown, { recursive: true, force: true });
+    await mkdir(tmpLocalConfig, { recursive: true });
+    await mkdir(tmpLocalUnknown, { recursive: true });
+    try {
+      for (const item of classification.allowlist) {
+        const src = join(this.claudeDir, item.name);
+        if (existsSync(src)) await cp(src, join(tmpLocalConfig, item.name), { recursive: true });
+      }
+      for (const item of classification.unknown) {
+        const src = join(this.claudeDir, item.name);
+        if (existsSync(src)) await cp(src, join(tmpLocalUnknown, item.name), { recursive: true });
+      }
+      const configDiff = await computeDiff(tmpLocalConfig, configDir);
+      const unknownDiff = await computeDiff(tmpLocalUnknown, unknownDir);
+      const hasChanges = configDiff.hasChanges || unknownDiff.hasChanges;
+      if (!hasChanges) {
+        if (!options.quiet) output.info("Dry run: no push changes detected.");
+      } else {
+        if (!options.quiet) {
+          output.heading("Dry run — push would change:");
+          const combined = {
+            added: [...configDiff.added, ...unknownDiff.added],
+            modified: [...configDiff.modified, ...unknownDiff.modified],
+            deleted: [...configDiff.deleted, ...unknownDiff.deleted],
+            hasChanges: true,
+          };
+          printDiffLines(combined);
+        }
+        process.exitCode = 1;
+      }
+    } finally {
+      if (existsSync(tmpLocalConfig)) await rm(tmpLocalConfig, { recursive: true, force: true });
+      if (existsSync(tmpLocalUnknown)) await rm(tmpLocalUnknown, { recursive: true, force: true });
     }
   }
 }

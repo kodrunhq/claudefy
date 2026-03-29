@@ -1,8 +1,9 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { output } from "../output.js";
 import type { ClaudefyConfig, LinksConfig, SyncFilterConfig } from "./types.js";
 import {
   CLAUDEFY_DIR,
@@ -12,6 +13,65 @@ import {
   MACHINE_ID_FILE,
   DEFAULT_SYNC_FILTER,
 } from "./defaults.js";
+
+const CURRENT_VERSION = 1;
+
+/**
+ * Validates a parsed config object at runtime and throws with a descriptive
+ * message if required fields are missing or have wrong types.
+ */
+function validateConfig(parsed: unknown, filePath: string): asserts parsed is ClaudefyConfig {
+  if (parsed === null || typeof parsed !== "object") {
+    throw new Error(`Invalid config file "${filePath}": expected an object.`);
+  }
+  const cfg = parsed as Record<string, unknown>;
+
+  if (typeof cfg["version"] !== "number") {
+    throw new Error(`Invalid config file "${filePath}": missing or invalid "version" field.`);
+  }
+
+  if (cfg["version"] !== CURRENT_VERSION) {
+    output.warn(
+      `Config version ${cfg["version"]} differs from expected ${CURRENT_VERSION}. ` +
+        `Proceeding, but some features may not work correctly.`,
+    );
+  }
+
+  if (cfg["backend"] === null || typeof cfg["backend"] !== "object") {
+    throw new Error(`Invalid config file "${filePath}": missing "backend" field.`);
+  }
+  const backend = cfg["backend"] as Record<string, unknown>;
+  if (typeof backend["url"] !== "string" || !backend["url"]) {
+    throw new Error(`Invalid config file "${filePath}": missing "backend.url" field.`);
+  }
+  if (backend["type"] !== "git") {
+    throw new Error(
+      `Invalid config file "${filePath}": "backend.type" must be "git", got "${backend["type"]}".`,
+    );
+  }
+
+  if (typeof cfg["machineId"] !== "string" || !cfg["machineId"]) {
+    throw new Error(`Invalid config file "${filePath}": missing "machineId" field.`);
+  }
+
+  if (cfg["encryption"] === null || typeof cfg["encryption"] !== "object") {
+    throw new Error(`Invalid config file "${filePath}": missing "encryption" field.`);
+  }
+  const encryption = cfg["encryption"] as Record<string, unknown>;
+  if (typeof encryption["enabled"] !== "boolean") {
+    throw new Error(`Invalid config file "${filePath}": "encryption.enabled" must be a boolean.`);
+  }
+  if (typeof encryption["useKeychain"] !== "boolean") {
+    throw new Error(
+      `Invalid config file "${filePath}": "encryption.useKeychain" must be a boolean.`,
+    );
+  }
+  if (typeof encryption["cacheDuration"] !== "string") {
+    throw new Error(
+      `Invalid config file "${filePath}": "encryption.cacheDuration" must be a string.`,
+    );
+  }
+}
 
 export class ConfigManager {
   private baseDir: string;
@@ -58,14 +118,17 @@ export class ConfigManager {
   async load(): Promise<ClaudefyConfig> {
     const path = join(this.configDir, CONFIG_FILE);
     const raw = await readFile(path, "utf-8");
+    let parsed: unknown;
     try {
-      return JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch (err) {
       throw new Error(
         `Corrupt config file "${path}": ${(err as Error).message}. Delete and re-run 'claudefy init'.`,
         { cause: err },
       );
     }
+    validateConfig(parsed, path);
+    return parsed as ClaudefyConfig;
   }
 
   async set(key: string, value: unknown): Promise<void> {
@@ -101,6 +164,8 @@ export class ConfigManager {
       throw new Error("Cannot assign to unsafe configuration object");
     }
     (obj as Record<string, unknown>)[lastSegment] = value;
+    // Validate after mutation — prevents silently saving a corrupt config
+    validateConfig(config, join(this.configDir, CONFIG_FILE));
     await this.saveConfig(config);
   }
 
@@ -153,15 +218,27 @@ export class ConfigManager {
     return existsSync(join(this.configDir, CONFIG_FILE));
   }
 
+  private async atomicWriteJson(dest: string, data: unknown): Promise<void> {
+    const tmp = `${dest}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify(data, null, 2));
+      // On Windows, rename() fails if dest exists. Remove dest first for cross-platform safety.
+      if (existsSync(dest)) await rm(dest, { force: true });
+      await rename(tmp, dest);
+    } finally {
+      if (existsSync(tmp)) await rm(tmp, { force: true });
+    }
+  }
+
   private async saveConfig(config: ClaudefyConfig): Promise<void> {
-    await writeFile(join(this.configDir, CONFIG_FILE), JSON.stringify(config, null, 2));
+    await this.atomicWriteJson(join(this.configDir, CONFIG_FILE), config);
   }
 
   private async saveLinks(links: LinksConfig): Promise<void> {
-    await writeFile(join(this.configDir, LINKS_FILE), JSON.stringify(links, null, 2));
+    await this.atomicWriteJson(join(this.configDir, LINKS_FILE), links);
   }
 
   private async saveSyncFilter(filter: SyncFilterConfig): Promise<void> {
-    await writeFile(join(this.configDir, SYNC_FILTER_FILE), JSON.stringify(filter, null, 2));
+    await this.atomicWriteJson(join(this.configDir, SYNC_FILTER_FILE), filter);
   }
 }

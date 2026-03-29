@@ -117,7 +117,18 @@ export class HookManager {
       const content = await readFile(this.settingsPath, "utf-8");
       if (content.trim() === "") return {};
       try {
-        return JSON.parse(content);
+        const parsed: unknown = JSON.parse(content);
+        if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+          return {};
+        }
+        const obj = parsed as Record<string, unknown>;
+        // Validate hooks shape if present — must be a plain object (not array)
+        if ("hooks" in obj && (typeof obj["hooks"] !== "object" || Array.isArray(obj["hooks"]))) {
+          const { hooks: _discarded, ...rest } = obj;
+          void _discarded;
+          return rest as ClaudeSettings;
+        }
+        return obj as ClaudeSettings;
       } catch (err) {
         if (err instanceof SyntaxError) {
           throw new Error(`Invalid JSON in settings file "${this.settingsPath}": ${err.message}`, {

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ConfigManager } from "../../src/config/config-manager.js";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -85,6 +85,31 @@ describe("ConfigManager", () => {
     await expect(configManager.set("nonexistent.key", "value")).rejects.toThrow(
       "Invalid config key",
     );
+  });
+
+  it("throws when loading config with missing backend", async () => {
+    await configManager.initialize("git@github.com:user/store.git");
+    // Overwrite config with invalid content missing backend
+    const configDir = join(tempDir, ".claudefy");
+    await writeFile(
+      join(configDir, "config.json"),
+      JSON.stringify({ version: 1, machineId: "test-id" }, null, 2),
+    );
+    await expect(configManager.load()).rejects.toThrow(/missing.*backend/i);
+  });
+
+  it("throws when loading config with missing machineId", async () => {
+    await configManager.initialize("git@github.com:user/store.git");
+    const configDir = join(tempDir, ".claudefy");
+    await writeFile(
+      join(configDir, "config.json"),
+      JSON.stringify(
+        { version: 1, backend: { type: "git", url: "git@github.com:x/y.git" } },
+        null,
+        2,
+      ),
+    );
+    await expect(configManager.load()).rejects.toThrow(/missing.*machineId/i);
   });
 
   it("rejects prototype pollution keys", async () => {

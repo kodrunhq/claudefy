@@ -1,4 +1,4 @@
-import { cp, mkdir, readdir } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join, resolve, relative, isAbsolute } from "node:path";
 
 export class BackupManager {
@@ -35,6 +35,45 @@ export class BackupManager {
       return entries.sort().reverse();
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Prune old backups. Removes backups older than maxAgeDays and keeps only
+   * the most recent maxCount backups.
+   */
+  async prune(options: { maxCount?: number; maxAgeDays?: number } = {}): Promise<void> {
+    const { maxCount, maxAgeDays } = options;
+    if (maxCount === undefined && maxAgeDays === undefined) return;
+
+    let backups = await this.listBackups(); // newest first
+
+    // Remove backups older than maxAgeDays
+    if (maxAgeDays !== undefined) {
+      const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+      const remaining: string[] = [];
+      for (const name of backups) {
+        const fullPath = join(this.backupsDir, name);
+        try {
+          const s = await stat(fullPath);
+          if (s.mtimeMs >= cutoff) {
+            remaining.push(name);
+          } else {
+            await rm(fullPath, { recursive: true, force: true });
+          }
+        } catch {
+          remaining.push(name); // Can't stat — preserve
+        }
+      }
+      backups = remaining;
+    }
+
+    // Remove excess backups beyond maxCount (list is newest-first, keep first maxCount)
+    if (maxCount !== undefined && backups.length > maxCount) {
+      const toDelete = backups.slice(maxCount);
+      for (const name of toDelete) {
+        await rm(join(this.backupsDir, name), { recursive: true, force: true });
+      }
     }
   }
 }

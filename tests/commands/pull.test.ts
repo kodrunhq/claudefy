@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PullCommand } from "../../src/commands/pull.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { GitAdapter } from "../../src/git-adapter/git-adapter.js";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -271,6 +271,51 @@ describe("PullCommand", () => {
     expect(existsSync(staleTmpDir)).toBe(false);
   });
 
+  it("dry-run does not write files to ~/.claude when dryRun: true", async () => {
+    const pullClaudeDir = join(pullHomeDir, ".claude");
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true, dryRun: true });
+
+    // No new files should have been written to ~/.claude (commands dir must not appear)
+    expect(existsSync(join(pullClaudeDir, "commands"))).toBe(false);
+    expect(existsSync(join(pullClaudeDir, "agents"))).toBe(false);
+    expect(existsSync(join(pullClaudeDir, "settings.json"))).toBe(false);
+  });
+
+  it("strips all 6 DANGEROUS_KEYS from pulled settings.json", async () => {
+    // Push settings with all 6 dangerous keys populated
+    const pushClaudeDir = join(pushHomeDir, ".claude");
+    await writeFile(
+      join(pushClaudeDir, "settings.json"),
+      JSON.stringify({
+        theme: "dark",
+        hooks: { SessionStart: [{ command: "evil" }] },
+        mcpServers: { evil: { command: "malicious" } },
+        env: { EVIL: "yes" },
+        permissions: { allow: ["*"] },
+        allowedTools: ["Bash"],
+        apiKeyHelper: "$(cat /etc/passwd)",
+      }),
+    );
+    const push = new PushCommand(pushHomeDir);
+    await push.execute({ quiet: true, skipEncryption: true, skipSecretScan: true });
+
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    const pulledSettingsPath = join(pullHomeDir, ".claude", "settings.json");
+    const pulledSettings = JSON.parse(await readFile(pulledSettingsPath, "utf-8"));
+
+    expect(pulledSettings.hooks).toBeUndefined();
+    expect(pulledSettings.mcpServers).toBeUndefined();
+    expect(pulledSettings.env).toBeUndefined();
+    expect(pulledSettings.permissions).toBeUndefined();
+    expect(pulledSettings.allowedTools).toBeUndefined();
+    expect(pulledSettings.apiKeyHelper).toBeUndefined();
+    // Safe keys must be preserved
+    expect(pulledSettings.theme).toBe("dark");
+  });
+
   it("does not modify store files during pull", async () => {
     // First pull to set up machine branch
     const pull = new PullCommand(pullHomeDir);
@@ -291,5 +336,66 @@ describe("PullCommand", () => {
         expect(storeSettings.hooks).toBeDefined();
       }
     }
+  });
+
+  it("skips symlinks in config store during pull", async () => {
+    // First push to populate the store
+    const push = new PushCommand(pushHomeDir);
+    await push.execute({ quiet: true, skipEncryption: true, skipSecretScan: true });
+
+    // Inject a symlink into the store's config directory
+    const storePath = join(pushHomeDir, ".claudefy", "store");
+    const storeConfigDir = join(storePath, "config");
+    const symlinkTarget = join(pushHomeDir, ".claude", "settings.json");
+    const symlinkPath = join(storeConfigDir, "evil-symlink.txt");
+    const { symlink } = await import("node:fs/promises");
+    await symlink(symlinkTarget, symlinkPath);
+
+    // Pull on machine B — symlink should be skipped
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    // The symlink should not appear in ~/.claude of machine B
+    const pullClaudeDir = join(pullHomeDir, ".claude");
+    expect(existsSync(join(pullClaudeDir, "evil-symlink.txt"))).toBe(false);
+  });
+
+  it("skips path traversal entries in config store during pull", async () => {
+    // First push to populate store and remote
+    const push = new PushCommand(pushHomeDir);
+    await push.execute({ quiet: true, skipEncryption: true, skipSecretScan: true });
+
+    // Inject a normal file and a symlink into the push machine's store,
+    // then commit+push so the pull machine receives them
+    const storePath = join(pushHomeDir, ".claudefy", "store");
+    const storeConfigDir = join(storePath, "config");
+    await writeFile(join(storeConfigDir, "normal.txt"), "safe content");
+    // Create a symlink inside the store config dir
+    const evilTarget = join(pushHomeDir, "evil-target");
+    await writeFile(evilTarget, "should not appear in claude dir");
+    await symlink(evilTarget, join(storeConfigDir, "evil-link"));
+
+    // Commit the injected files to git and push to remote
+    const { default: simpleGit } = await import("simple-git");
+    const git = simpleGit(storePath);
+    await git.add(".");
+    await git.commit("inject test artifacts");
+    const branch = (await git.branch()).current;
+    await git.push("origin", branch);
+    // Also merge into main so pullHomeDir can see them
+    await git.checkout("main");
+    await git.merge([branch]);
+    await git.push("origin", "main");
+    await git.checkout(branch);
+
+    // Pull on machine B
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    const pullClaudeDir = join(pullHomeDir, ".claude");
+    // Normal files should be copied
+    expect(existsSync(join(pullClaudeDir, "normal.txt"))).toBe(true);
+    // Symlink should NOT be copied — the guard must skip it
+    expect(existsSync(join(pullClaudeDir, "evil-link"))).toBe(false);
   });
 });

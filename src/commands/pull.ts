@@ -1,7 +1,6 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import chalk from "chalk";
 import { simpleGit } from "simple-git";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -30,6 +29,17 @@ export interface PullResult {
   backupPath?: string;
   filesUpdated: number;
 }
+
+// Keys stripped from ALL settings.json files (top-level and per-project) during pull.
+// Per CLAUDE.md spec: prevent remote code injection via hooks/mcpServers/env/permissions.
+const DANGEROUS_KEYS = [
+  "hooks",
+  "mcpServers",
+  "env",
+  "permissions",
+  "allowedTools",
+  "apiKeyHelper",
+] as const;
 
 export class PullCommand {
   private homeDir: string;
@@ -95,51 +105,7 @@ export class PullCommand {
 
     // Dry-run: show what would be pulled without modifying anything
     if (options.dryRun) {
-      const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
-      const { computeDiff } = await import("../diff-utils/diff-utils.js");
-      const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
-      const tmpStore = join(claudefyDir, ".dryrun-store-tmp");
-      const tmpLocal = join(claudefyDir, ".dryrun-local-tmp");
-      if (existsSync(tmpStore)) await rmTmp(tmpStore, { recursive: true, force: true });
-      if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
-      await mkTmp(tmpStore, { recursive: true });
-      await mkTmp(tmpLocal, { recursive: true });
-      try {
-        // Copy store config, stripping .age extensions
-        if (existsSync(storeConfigDir)) {
-          await cp(storeConfigDir, tmpStore, { recursive: true });
-          await this.stripAgeExtensionsForDryRun(tmpStore);
-        }
-        // Copy allowlisted local files
-        if (existsSync(this.claudeDir)) {
-          const syncFilterConfig = await this.configManager.getSyncFilter();
-          const { SyncFilter } = await import("../sync-filter/sync-filter.js");
-          const syncFilter = new SyncFilter(syncFilterConfig);
-          const classification = await syncFilter.classify(this.claudeDir);
-          const filteredAllowlist = options.only
-            ? classification.allowlist.filter((i) => i.name === options.only)
-            : classification.allowlist;
-          for (const item of filteredAllowlist) {
-            const src = join(this.claudeDir, item.name);
-            if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
-          }
-        }
-        const diff = await computeDiff(tmpStore, tmpLocal);
-        if (!diff.hasChanges) {
-          if (!options.quiet) output.info("Dry run: no pull changes detected.");
-        } else {
-          if (!options.quiet) {
-            output.heading("Dry run — pull would change:");
-            for (const f of diff.added) console.log(chalk.green(`  Added:    ${f}`));
-            for (const f of diff.modified) console.log(chalk.yellow(`  Modified: ${f}`));
-            for (const f of diff.deleted) console.log(chalk.red(`  Deleted:  ${f}`));
-          }
-          process.exitCode = 1;
-        }
-      } finally {
-        if (existsSync(tmpStore)) await rmTmp(tmpStore, { recursive: true, force: true });
-        if (existsSync(tmpLocal)) await rmTmp(tmpLocal, { recursive: true, force: true });
-      }
+      await this.executePullDryRun(options, storePath, claudefyDir, result);
       return result;
     }
 
@@ -324,6 +290,9 @@ export class PullCommand {
           }
         }
 
+        // Security: strip DANGEROUS_KEYS from all project-level settings.json files
+        await this.stripDangerousKeysFromProjects(projectsDir);
+
         if (interruptedSignal) break;
 
         // 7. Merge and copy to ~/.claude
@@ -343,14 +312,6 @@ export class PullCommand {
           }
 
           // Security: strip keys that can execute code or modify permissions
-          const DANGEROUS_KEYS = [
-            "hooks",
-            "mcpServers",
-            "env",
-            "permissions",
-            "allowedTools",
-            "apiKeyHelper",
-          ];
           if (remoteSettings && typeof remoteSettings === "object") {
             for (const key of DANGEROUS_KEYS) {
               if (key in remoteSettings) {
@@ -383,6 +344,7 @@ export class PullCommand {
           const entries = await readdir(tmpConfigDir, { withFileTypes: true });
           for (const entry of entries) {
             if (entry.name === "settings.json") continue; // Already handled
+            if (entry.name === "claude-json-sync.json") continue; // Internal store artifact
             if (options.only && entry.name !== options.only) continue;
 
             // Security: skip symlinks to prevent path traversal attacks
@@ -504,8 +466,17 @@ export class PullCommand {
       const git = simpleGit(storePath);
       // Use git show to read .override from main without switching branches
       const content = await git.show(["main:.override"]);
-      const marker = JSON.parse(content);
-      return { machine: marker.machine, timestamp: marker.timestamp };
+      const marker: unknown = JSON.parse(content);
+      if (
+        marker !== null &&
+        typeof marker === "object" &&
+        typeof (marker as Record<string, unknown>)["machine"] === "string" &&
+        typeof (marker as Record<string, unknown>)["timestamp"] === "string"
+      ) {
+        const m = marker as Record<string, unknown>;
+        return { machine: m["machine"] as string, timestamp: m["timestamp"] as string };
+      }
+      return null;
     } catch {
       return null;
     }
@@ -546,6 +517,67 @@ export class PullCommand {
     }
   }
 
+  private async executePullDryRun(
+    options: PullOptions,
+    storePath: string,
+    claudefyDir: string,
+    result: PullResult,
+  ): Promise<void> {
+    const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
+    const storeUnknownDir = join(storePath, STORE_UNKNOWN_DIR);
+    const { computeDiff, printDiffLines } = await import("../diff-utils/diff-utils.js");
+    const tmpStore = join(claudefyDir, ".dryrun-store-tmp");
+    const tmpLocal = join(claudefyDir, ".dryrun-local-tmp");
+    if (existsSync(tmpStore)) await rm(tmpStore, { recursive: true, force: true });
+    if (existsSync(tmpLocal)) await rm(tmpLocal, { recursive: true, force: true });
+    await mkdir(tmpStore, { recursive: true });
+    await mkdir(tmpLocal, { recursive: true });
+    try {
+      // Copy store config, stripping .age extensions
+      if (existsSync(storeConfigDir)) {
+        await cp(storeConfigDir, tmpStore, { recursive: true });
+        await this.stripAgeExtensionsForDryRun(tmpStore);
+      }
+      // Also include unknown items — copy at root level to match real pull behavior
+      // (real pull writes unknown items to ~/.claude/<name>, not ~/.claude/unknown/<name>)
+      if (existsSync(storeUnknownDir)) {
+        const unknownEntries = await readdir(storeUnknownDir, { withFileTypes: true });
+        for (const entry of unknownEntries) {
+          const src = join(storeUnknownDir, entry.name);
+          await cp(src, join(tmpStore, entry.name), { recursive: true });
+        }
+      }
+      // Copy allowlisted local files
+      if (existsSync(this.claudeDir)) {
+        const syncFilterConfig = await this.configManager.getSyncFilter();
+        const { SyncFilter } = await import("../sync-filter/sync-filter.js");
+        const syncFilter = new SyncFilter(syncFilterConfig);
+        const classification = await syncFilter.classify(this.claudeDir);
+        const filteredAllowlist = options.only
+          ? classification.allowlist.filter((i) => i.name === options.only)
+          : classification.allowlist;
+        for (const item of filteredAllowlist) {
+          const src = join(this.claudeDir, item.name);
+          if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
+        }
+      }
+      const diff = await computeDiff(tmpStore, tmpLocal);
+      if (!diff.hasChanges) {
+        if (!options.quiet) output.info("Dry run: no pull changes detected.");
+      } else {
+        if (!options.quiet) {
+          output.heading("Dry run — pull would change:");
+          printDiffLines(diff);
+        }
+        process.exitCode = 1;
+      }
+      void result; // result is returned by the caller
+    } finally {
+      if (existsSync(tmpStore)) await rm(tmpStore, { recursive: true, force: true });
+      if (existsSync(tmpLocal)) await rm(tmpLocal, { recursive: true, force: true });
+    }
+  }
+
   private async stripAgeExtensionsForDryRun(dir: string): Promise<void> {
     if (!existsSync(dir)) return;
     const entries = await readdir(dir, { withFileTypes: true });
@@ -558,6 +590,39 @@ export class PullCommand {
         const newPath = join(dir, baseName);
         await rm(fullPath);
         await writeFile(newPath, "[encrypted content]");
+      }
+    }
+  }
+
+  /**
+   * Recursively strip DANGEROUS_KEYS from settings.json files inside projects/ subdirectories.
+   * This prevents per-project settings from injecting hooks/mcpServers from a remote attacker.
+   */
+  private async stripDangerousKeysFromProjects(projectsDir: string): Promise<void> {
+    if (!existsSync(projectsDir)) return;
+    const projectDirs = await readdir(projectsDir, { withFileTypes: true });
+    for (const entry of projectDirs) {
+      if (!entry.isDirectory()) continue;
+      const settingsPath = join(projectsDir, entry.name, "settings.json");
+      if (!existsSync(settingsPath)) continue;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(await readFile(settingsPath, "utf-8"));
+      } catch {
+        continue; // Malformed JSON — skip silently
+      }
+      // Only strip keys from plain objects — skip arrays, strings, numbers, null
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      const settings = parsed as Record<string, unknown>;
+      let changed = false;
+      for (const key of DANGEROUS_KEYS) {
+        if (key in settings) {
+          delete settings[key];
+          changed = true;
+        }
+      }
+      if (changed) {
+        await writeFile(settingsPath, JSON.stringify(settings, null, 2));
       }
     }
   }

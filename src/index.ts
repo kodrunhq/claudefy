@@ -3,9 +3,10 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { program } from "./cli.js";
+import type { PackageJson } from "./types.js";
 
 const require = createRequire(import.meta.url);
-const pkg = require("../package.json") as { name: string; version: string };
+const pkg = require("../package.json") as PackageJson;
 
 // Non-blocking update check (cached for 1 day).
 // Suppressed in quiet mode (-q/--quiet) to avoid unwanted output.

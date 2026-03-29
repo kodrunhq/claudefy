@@ -17,6 +17,8 @@ export interface CommitResult {
   committed: boolean;
   pushed: boolean;
   mergedToMain: boolean;
+  pushError?: string;
+  mergeError?: string;
 }
 
 export interface OverrideMarker {
@@ -127,8 +129,9 @@ export class GitAdapter {
     try {
       await this.git!.push(["-u", "origin", currentBranch]);
       result.pushed = true;
-    } catch {
+    } catch (err) {
       result.pushed = false;
+      result.pushError = (err as Error).message;
       return result;
     }
 
@@ -140,8 +143,9 @@ export class GitAdapter {
         await this.git!.merge([machineBranch]);
         await this.git!.push(["-u", "origin", "main"]);
         result.mergedToMain = true;
-      } catch {
+      } catch (err) {
         result.mergedToMain = false;
+        result.mergeError = (err as Error).message;
         // Abort any in-progress merge
         await this.git!.merge(["--abort"]).catch(() => {});
       } finally {
@@ -178,9 +182,11 @@ export class GitAdapter {
     await this.git!.checkout(currentBranch);
     try {
       await this.git!.merge(["main"]);
-    } catch {
+    } catch (err) {
       // Merge conflict — abort, machine branch state wins
       await this.git!.merge(["--abort"]).catch(() => {});
+      // Re-throw so callers can log the merge error
+      throw err;
     }
   }
 
@@ -261,9 +267,19 @@ export class GitAdapter {
       await writeFile(join(this.storePath, ".gitkeep"), "");
       await this.git.add(".");
       await this.git.commit("initial claudefy store");
-      await this.git.push(["-u", "origin", "main"]).catch(() => {});
+      await this.git
+        .push(["-u", "origin", "main"])
+        .catch((err) =>
+          console.warn(
+            `[claudefy] ensureMainBranch: push to origin/main failed: ${(err as Error).message}`,
+          ),
+        );
       // Update remote HEAD to point to main
-      await this.git.remote(["set-head", "origin", "main"]).catch(() => {});
+      await this.git
+        .remote(["set-head", "origin", "main"])
+        .catch((err) =>
+          console.warn(`[claudefy] ensureMainBranch: set-head failed: ${(err as Error).message}`),
+        );
     }
   }
 
