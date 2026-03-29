@@ -50,27 +50,28 @@ export class Lockfile {
           typeof (parsed as Record<string, unknown>)["pid"] !== "number" ||
           typeof (parsed as Record<string, unknown>)["startedAt"] !== "string"
         ) {
+          // Invalid or corrupt lockfile — remove it and fall through to acquire a new lock
           unlinkSync(lockPath);
-          return null;
-        }
-        const info: LockInfo = parsed as LockInfo;
-        const age = Date.now() - new Date(info.startedAt).getTime();
+        } else {
+          const info: LockInfo = parsed as LockInfo;
+          const age = Date.now() - new Date(info.startedAt).getTime();
 
-        if (isPidAlive(info.pid) && age < MAX_LOCK_AGE_MS) {
-          if (info.pid === process.pid) {
-            // Re-entrant: same process already holds the lock
-            return new Lockfile(lockPath, true);
+          if (isPidAlive(info.pid) && age < MAX_LOCK_AGE_MS) {
+            if (info.pid === process.pid) {
+              // Re-entrant: same process already holds the lock
+              return new Lockfile(lockPath, true);
+            }
+            if (!quiet) {
+              output.info(
+                `Another claudefy operation is in progress (PID ${info.pid}, ${info.command}). Skipping.\n` +
+                  `  If this is wrong, delete ${lockPath} and retry.`,
+              );
+            }
+            return null;
           }
-          if (!quiet) {
-            output.info(
-              `Another claudefy operation is in progress (PID ${info.pid}, ${info.command}). Skipping.\n` +
-                `  If this is wrong, delete ${lockPath} and retry.`,
-            );
-          }
-          return null;
-        }
 
-        unlinkSync(lockPath);
+          unlinkSync(lockPath);
+        }
       } catch {
         try {
           unlinkSync(lockPath);

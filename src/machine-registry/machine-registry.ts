@@ -100,9 +100,11 @@ export class MachineRegistry {
     const tmp = `${this.manifestPath}.tmp`;
     try {
       await writeFile(tmp, JSON.stringify(manifest, null, 2));
+      // On Windows, rename() fails if dest exists. Remove dest first for cross-platform safety.
+      if (existsSync(this.manifestPath)) await rm(this.manifestPath, { force: true });
       await rename(tmp, this.manifestPath);
     } finally {
-      await rm(tmp, { force: true });
+      if (existsSync(tmp)) await rm(tmp, { force: true });
     }
   }
 }

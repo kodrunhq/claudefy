@@ -87,15 +87,22 @@ export class RotatePassphraseCommand {
           }
         }
       } finally {
-        // Cleanup: always remove plaintext files
+        // Cleanup: always remove plaintext files and any .new artifacts from failed Phase 1
         for (const p of plainFiles) {
           if (existsSync(p)) await rm(p).catch(() => {});
         }
+        if (phase1Succeeded < ageFiles.length) {
+          for (const tmpNew of newAgeFiles) {
+            if (existsSync(tmpNew)) await rm(tmpNew).catch(() => {});
+          }
+        }
       }
 
-      // Phase 2: Atomic rename pass — replace each original with the .new file.
-      // Each rename() is atomic per-file (POSIX guarantee).
+      // Phase 2: Replace each original with the .new file.
+      // On POSIX rename() is atomic. On Windows rename() fails if dest exists,
+      // so we remove the destination first.
       for (let i = 0; i < ageFiles.length; i++) {
+        if (existsSync(ageFiles[i])) await rm(ageFiles[i]);
         await rename(newAgeFiles[i], ageFiles[i]);
       }
       const rotated = ageFiles.length;

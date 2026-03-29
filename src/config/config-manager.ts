@@ -46,6 +46,18 @@ function validateConfig(parsed: unknown, filePath: string): asserts parsed is Cl
   if (typeof cfg["machineId"] !== "string" || !cfg["machineId"]) {
     throw new Error(`Invalid config file "${filePath}": missing "machineId" field.`);
   }
+
+  if (typeof backend["type"] !== "string") {
+    throw new Error(`Invalid config file "${filePath}": missing "backend.type" field.`);
+  }
+
+  if (cfg["encryption"] === null || typeof cfg["encryption"] !== "object") {
+    throw new Error(`Invalid config file "${filePath}": missing "encryption" field.`);
+  }
+  const encryption = cfg["encryption"] as Record<string, unknown>;
+  if (typeof encryption["enabled"] !== "boolean") {
+    throw new Error(`Invalid config file "${filePath}": "encryption.enabled" must be a boolean.`);
+  }
 }
 
 export class ConfigManager {
@@ -193,36 +205,27 @@ export class ConfigManager {
     return existsSync(join(this.configDir, CONFIG_FILE));
   }
 
-  private async saveConfig(config: ClaudefyConfig): Promise<void> {
-    const dest = join(this.configDir, CONFIG_FILE);
+  private async atomicWriteJson(dest: string, data: unknown): Promise<void> {
     const tmp = `${dest}.tmp`;
     try {
-      await writeFile(tmp, JSON.stringify(config, null, 2));
+      await writeFile(tmp, JSON.stringify(data, null, 2));
+      // On Windows, rename() fails if dest exists. Remove dest first for cross-platform safety.
+      if (existsSync(dest)) await rm(dest, { force: true });
       await rename(tmp, dest);
     } finally {
-      await rm(tmp, { force: true });
+      if (existsSync(tmp)) await rm(tmp, { force: true });
     }
+  }
+
+  private async saveConfig(config: ClaudefyConfig): Promise<void> {
+    await this.atomicWriteJson(join(this.configDir, CONFIG_FILE), config);
   }
 
   private async saveLinks(links: LinksConfig): Promise<void> {
-    const dest = join(this.configDir, LINKS_FILE);
-    const tmp = `${dest}.tmp`;
-    try {
-      await writeFile(tmp, JSON.stringify(links, null, 2));
-      await rename(tmp, dest);
-    } finally {
-      await rm(tmp, { force: true });
-    }
+    await this.atomicWriteJson(join(this.configDir, LINKS_FILE), links);
   }
 
   private async saveSyncFilter(filter: SyncFilterConfig): Promise<void> {
-    const dest = join(this.configDir, SYNC_FILTER_FILE);
-    const tmp = `${dest}.tmp`;
-    try {
-      await writeFile(tmp, JSON.stringify(filter, null, 2));
-      await rename(tmp, dest);
-    } finally {
-      await rm(tmp, { force: true });
-    }
+    await this.atomicWriteJson(join(this.configDir, SYNC_FILTER_FILE), filter);
   }
 }

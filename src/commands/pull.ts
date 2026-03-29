@@ -538,9 +538,14 @@ export class PullCommand {
         await cp(storeConfigDir, tmpStore, { recursive: true });
         await this.stripAgeExtensionsForDryRun(tmpStore);
       }
-      // Also include unknown items in the diff comparison
+      // Also include unknown items — copy at root level to match real pull behavior
+      // (real pull writes unknown items to ~/.claude/<name>, not ~/.claude/unknown/<name>)
       if (existsSync(storeUnknownDir)) {
-        await cp(storeUnknownDir, join(tmpStore, STORE_UNKNOWN_DIR), { recursive: true });
+        const unknownEntries = await readdir(storeUnknownDir, { withFileTypes: true });
+        for (const entry of unknownEntries) {
+          const src = join(storeUnknownDir, entry.name);
+          await cp(src, join(tmpStore, entry.name), { recursive: true });
+        }
       }
       // Copy allowlisted local files
       if (existsSync(this.claudeDir)) {
@@ -600,20 +605,25 @@ export class PullCommand {
       if (!entry.isDirectory()) continue;
       const settingsPath = join(projectsDir, entry.name, "settings.json");
       if (!existsSync(settingsPath)) continue;
-      let settings: Record<string, unknown>;
+      let parsed: unknown;
       try {
-        settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+        parsed = JSON.parse(await readFile(settingsPath, "utf-8"));
       } catch {
         continue; // Malformed JSON — skip silently
       }
-      if (settings && typeof settings === "object") {
-        for (const key of DANGEROUS_KEYS) {
-          if (key in settings) {
-            delete settings[key];
-          }
+      // Only strip keys from plain objects — skip arrays, strings, numbers, null
+      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) continue;
+      const settings = parsed as Record<string, unknown>;
+      let changed = false;
+      for (const key of DANGEROUS_KEYS) {
+        if (key in settings) {
+          delete settings[key];
+          changed = true;
         }
       }
-      await writeFile(settingsPath, JSON.stringify(settings, null, 2));
+      if (changed) {
+        await writeFile(settingsPath, JSON.stringify(settings, null, 2));
+      }
     }
   }
 }
