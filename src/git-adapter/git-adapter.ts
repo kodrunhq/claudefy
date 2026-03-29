@@ -17,6 +17,8 @@ export interface CommitResult {
   committed: boolean;
   pushed: boolean;
   mergedToMain: boolean;
+  pushError?: string;
+  mergeError?: string;
 }
 
 export interface OverrideMarker {
@@ -127,8 +129,9 @@ export class GitAdapter {
     try {
       await this.git!.push(["-u", "origin", currentBranch]);
       result.pushed = true;
-    } catch {
+    } catch (err) {
       result.pushed = false;
+      result.pushError = (err as Error).message;
       return result;
     }
 
@@ -140,8 +143,9 @@ export class GitAdapter {
         await this.git!.merge([machineBranch]);
         await this.git!.push(["-u", "origin", "main"]);
         result.mergedToMain = true;
-      } catch {
+      } catch (err) {
         result.mergedToMain = false;
+        result.mergeError = (err as Error).message;
         // Abort any in-progress merge
         await this.git!.merge(["--abort"]).catch(() => {});
       } finally {

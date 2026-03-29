@@ -326,21 +326,29 @@ export class PushCommand {
     await log?.log("info", "push", `Encrypted ${filesToEncrypt.size} file(s)`);
 
     if (commitResult.committed && !commitResult.pushed) {
-      await log?.log("warn", "push", "Changes committed locally but push to remote failed");
+      const detail = commitResult.pushError ? ` (${commitResult.pushError})` : "";
+      await log?.log(
+        "warn",
+        "push",
+        `Changes committed locally but push to remote failed${detail}`,
+      );
       if (!options.quiet) {
         output.warn(
-          "Changes were committed locally, but pushing to the remote failed. Retry with 'claudefy push'.",
+          `Changes were committed locally, but pushing to the remote failed${detail}. Retry with 'claudefy push'.`,
         );
       }
     }
     if (commitResult.pushed && !commitResult.mergedToMain) {
+      const detail = commitResult.mergeError ? ` (${commitResult.mergeError})` : "";
       await log?.log(
         "warn",
         "push",
-        "Pushed but merge to main failed — may need conflict resolution",
+        `Pushed but merge to main failed — may need conflict resolution${detail}`,
       );
       if (!options.quiet) {
-        output.warn("Unable to merge machine branch into main. You may need to resolve conflicts.");
+        output.warn(
+          `Unable to merge machine branch into main. You may need to resolve conflicts${detail}.`,
+        );
       }
     }
 

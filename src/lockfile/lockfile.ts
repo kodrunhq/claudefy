@@ -107,9 +107,18 @@ export async function withLock(
   quiet: boolean,
   claudefyDir: string,
   fn: () => Promise<void>,
+  options?: { critical?: boolean },
 ): Promise<void> {
   const lock = Lockfile.tryAcquire(command, quiet, claudefyDir);
-  if (!lock) return;
+  if (!lock) {
+    if (options?.critical) {
+      throw new Error(
+        `Cannot run '${command}' — another claudefy operation is already in progress. ` +
+          `Delete ${claudefyDir}/.lock and retry if this is incorrect.`,
+      );
+    }
+    return;
+  }
   try {
     await fn();
   } finally {

@@ -59,42 +59,45 @@ export class RotatePassphraseCommand {
         return;
       }
 
-      // Verify old passphrase by decrypting the first file
       const oldEncryptor = new Encryptor(oldPass, config.backend.url);
-      try {
-        const testFile = ageFiles[0];
-        const plainFile = testFile.replace(/\.age$/, "");
-        const ad = relative(storePath, plainFile).split(sep).join("/");
-        await oldEncryptor.decryptFile(testFile, plainFile, ad);
-        if (existsSync(plainFile)) {
-          await rm(plainFile);
-        }
-      } catch {
-        throw new Error("Old passphrase is incorrect. No files were modified.");
-      }
-
-      // Re-encrypt all files with the new passphrase
       const newEncryptor = new Encryptor(newPass, config.backend.url);
-      let rotated = 0;
 
-      for (const ageFile of ageFiles) {
-        const plainFile = ageFile.replace(/\.age$/, "");
-        const tmpNewAge = ageFile + ".new";
-        const ad = relative(storePath, plainFile).split(sep).join("/");
+      // Phase 1: Decrypt all files to plaintext and re-encrypt to .new files.
+      // If any file fails here, NO renames happen — originals are preserved.
+      const plainFiles: string[] = [];
+      const newAgeFiles: string[] = [];
+      let phase1Succeeded = 0;
 
-        try {
-          await oldEncryptor.decryptFile(ageFile, plainFile, ad);
-          await newEncryptor.encryptFile(plainFile, tmpNewAge, ad);
-          await rm(ageFile);
-          await rename(tmpNewAge, ageFile);
-          await rm(plainFile);
-          rotated++;
-        } finally {
-          // Clean up plaintext and temp files on error
-          if (existsSync(plainFile)) await rm(plainFile).catch(() => {});
-          if (existsSync(tmpNewAge)) await rm(tmpNewAge).catch(() => {});
+      try {
+        for (const ageFile of ageFiles) {
+          const plainFile = ageFile.replace(/\.age$/, "");
+          const tmpNewAge = `${ageFile}.new`;
+          const ad = relative(storePath, plainFile).split(sep).join("/");
+          try {
+            await oldEncryptor.decryptFile(ageFile, plainFile, ad);
+            plainFiles.push(plainFile);
+            await newEncryptor.encryptFile(plainFile, tmpNewAge, ad);
+            newAgeFiles.push(tmpNewAge);
+            phase1Succeeded++;
+          } catch (err) {
+            throw new Error(
+              `Rotation aborted after ${phase1Succeeded} of ${ageFiles.length} files before failure: ${(err as Error).message}`,
+            );
+          }
+        }
+      } finally {
+        // Cleanup: always remove plaintext files
+        for (const p of plainFiles) {
+          if (existsSync(p)) await rm(p).catch(() => {});
         }
       }
+
+      // Phase 2: Atomic rename pass — replace each original with the .new file.
+      // Each rename() is atomic per-file (POSIX guarantee).
+      for (let i = 0; i < ageFiles.length; i++) {
+        await rename(newAgeFiles[i], ageFiles[i]);
+      }
+      const rotated = ageFiles.length;
 
       // Update keychain if enabled
       if (config.encryption.useKeychain) {

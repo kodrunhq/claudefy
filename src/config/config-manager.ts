@@ -131,6 +131,8 @@ export class ConfigManager {
       throw new Error("Cannot assign to unsafe configuration object");
     }
     (obj as Record<string, unknown>)[lastSegment] = value;
+    // Validate after mutation — prevents silently saving a corrupt config
+    validateConfig(config, join(this.configDir, CONFIG_FILE));
     await this.saveConfig(config);
   }
 

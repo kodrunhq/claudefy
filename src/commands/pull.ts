@@ -389,6 +389,7 @@ export class PullCommand {
           const entries = await readdir(tmpConfigDir, { withFileTypes: true });
           for (const entry of entries) {
             if (entry.name === "settings.json") continue; // Already handled
+            if (entry.name === "claude-json-sync.json") continue; // Internal store artifact
             if (options.only && entry.name !== options.only) continue;
 
             // Security: skip symlinks to prevent path traversal attacks
