@@ -1,4 +1,4 @@
-import { lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
@@ -6,6 +6,7 @@ import { hostname, platform } from "node:os";
 import chalk from "chalk";
 import { ConfigManager } from "../config/config-manager.js";
 import { SyncFilter } from "../sync-filter/sync-filter.js";
+import type { ClassificationResult } from "../sync-filter/types.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PathMapper } from "../path-mapper/path-mapper.js";
 import { MachineRegistry } from "../machine-registry/machine-registry.js";
@@ -144,47 +145,7 @@ export class PushCommand {
 
     // Dry-run: show what would be pushed without modifying anything
     if (options.dryRun) {
-      const { computeDiff } = await import("../diff-utils/diff-utils.js");
-      const { cp, rm: rmTmp, mkdir: mkTmp } = await import("node:fs/promises");
-      const tmpLocalConfig = join(this.homeDir, ".claudefy", ".dryrun-config-tmp");
-      const tmpLocalUnknown = join(this.homeDir, ".claudefy", ".dryrun-unknown-tmp");
-      if (existsSync(tmpLocalConfig)) await rmTmp(tmpLocalConfig, { recursive: true, force: true });
-      if (existsSync(tmpLocalUnknown))
-        await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
-      await mkTmp(tmpLocalConfig, { recursive: true });
-      await mkTmp(tmpLocalUnknown, { recursive: true });
-      try {
-        for (const item of classification.allowlist) {
-          const src = join(this.claudeDir, item.name);
-          if (existsSync(src)) await cp(src, join(tmpLocalConfig, item.name), { recursive: true });
-        }
-        for (const item of classification.unknown) {
-          const src = join(this.claudeDir, item.name);
-          if (existsSync(src)) await cp(src, join(tmpLocalUnknown, item.name), { recursive: true });
-        }
-        const configDiff = await computeDiff(tmpLocalConfig, configDir);
-        const unknownDiff = await computeDiff(tmpLocalUnknown, unknownDir);
-        const hasChanges = configDiff.hasChanges || unknownDiff.hasChanges;
-        if (!hasChanges) {
-          if (!options.quiet) output.info("Dry run: no push changes detected.");
-        } else {
-          if (!options.quiet) {
-            output.heading("Dry run — push would change:");
-            const allAdded = [...configDiff.added, ...unknownDiff.added];
-            const allModified = [...configDiff.modified, ...unknownDiff.modified];
-            const allDeleted = [...configDiff.deleted, ...unknownDiff.deleted];
-            for (const f of allAdded) console.log(chalk.green(`  Added:    ${f}`));
-            for (const f of allModified) console.log(chalk.yellow(`  Modified: ${f}`));
-            for (const f of allDeleted) console.log(chalk.red(`  Deleted:  ${f}`));
-          }
-          process.exitCode = 1;
-        }
-      } finally {
-        if (existsSync(tmpLocalConfig))
-          await rmTmp(tmpLocalConfig, { recursive: true, force: true });
-        if (existsSync(tmpLocalUnknown))
-          await rmTmp(tmpLocalUnknown, { recursive: true, force: true });
-      }
+      await this.executePushDryRun(options, classification, configDir, unknownDir);
       return;
     }
 
@@ -600,6 +561,53 @@ export class PushCommand {
       if (!currentSet.has(baseName) && !currentSet.has(entry)) {
         await rm(join(storeDir, entry), { recursive: true });
       }
+    }
+  }
+
+  private async executePushDryRun(
+    options: PushOptions,
+    classification: ClassificationResult,
+    configDir: string,
+    unknownDir: string,
+  ): Promise<void> {
+    const { computeDiff, printDiffLines } = await import("../diff-utils/diff-utils.js");
+    const claudefyDir = join(this.homeDir, ".claudefy");
+    const tmpLocalConfig = join(claudefyDir, ".dryrun-config-tmp");
+    const tmpLocalUnknown = join(claudefyDir, ".dryrun-unknown-tmp");
+    if (existsSync(tmpLocalConfig)) await rm(tmpLocalConfig, { recursive: true, force: true });
+    if (existsSync(tmpLocalUnknown)) await rm(tmpLocalUnknown, { recursive: true, force: true });
+    await mkdir(tmpLocalConfig, { recursive: true });
+    await mkdir(tmpLocalUnknown, { recursive: true });
+    try {
+      for (const item of classification.allowlist) {
+        const src = join(this.claudeDir, item.name);
+        if (existsSync(src)) await cp(src, join(tmpLocalConfig, item.name), { recursive: true });
+      }
+      for (const item of classification.unknown) {
+        const src = join(this.claudeDir, item.name);
+        if (existsSync(src)) await cp(src, join(tmpLocalUnknown, item.name), { recursive: true });
+      }
+      const configDiff = await computeDiff(tmpLocalConfig, configDir);
+      const unknownDiff = await computeDiff(tmpLocalUnknown, unknownDir);
+      const hasChanges = configDiff.hasChanges || unknownDiff.hasChanges;
+      if (!hasChanges) {
+        if (!options.quiet) output.info("Dry run: no push changes detected.");
+      } else {
+        if (!options.quiet) {
+          output.heading("Dry run — push would change:");
+          const combined = {
+            added: [...configDiff.added, ...unknownDiff.added],
+            modified: [...configDiff.modified, ...unknownDiff.modified],
+            deleted: [...configDiff.deleted, ...unknownDiff.deleted],
+            hasChanges: true,
+          };
+          printDiffLines(combined);
+        }
+        process.exitCode = 1;
+      }
+    } finally {
+      if (existsSync(tmpLocalConfig)) await rm(tmpLocalConfig, { recursive: true, force: true });
+      if (existsSync(tmpLocalUnknown)) await rm(tmpLocalUnknown, { recursive: true, force: true });
     }
   }
 }

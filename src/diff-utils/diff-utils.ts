@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
+import chalk from "chalk";
 
 export interface DiffResult {
   added: string[]; // present in source, not in target
@@ -60,4 +61,14 @@ export async function computeDiff(sourceDir: string, targetDir: string): Promise
     modified: modified.sort(),
     hasChanges: added.length > 0 || deleted.length > 0 || modified.length > 0,
   };
+}
+
+/**
+ * Prints diff result lines to stdout with color coding.
+ * Shared by push, pull, and diff commands.
+ */
+export function printDiffLines(diff: DiffResult): void {
+  for (const f of diff.added) console.log(chalk.green(`  Added:    ${f}`));
+  for (const f of diff.modified) console.log(chalk.yellow(`  Modified: ${f}`));
+  for (const f of diff.deleted) console.log(chalk.red(`  Deleted:  ${f}`));
 }
