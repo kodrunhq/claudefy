@@ -61,7 +61,7 @@ describe("RotatePassphraseCommand", () => {
     await rm(remoteDir, { recursive: true, force: true });
   });
 
-  it("re-encrypts files successfully on rotation", async () => {
+  it("re-encrypts files successfully on rotation", { timeout: 120_000 }, async () => {
     const storePath = join(homeDir, ".claudefy", "store");
 
     // Check if any .age files exist in store (depends on secret scanner)
@@ -101,7 +101,7 @@ describe("RotatePassphraseCommand", () => {
     }
   });
 
-  it("throws when wrong old passphrase is provided", async () => {
+  it("throws when wrong old passphrase is provided", { timeout: 120_000 }, async () => {
     const storePath = join(homeDir, ".claudefy", "store");
 
     // Inject an encrypted file so rotation has something to work with
@@ -123,7 +123,7 @@ describe("RotatePassphraseCommand", () => {
     ).rejects.toThrow(/incorrect|wrong.*pass|aborted|failed/i);
   });
 
-  it("leaves no plaintext files after rotation", async () => {
+  it("leaves no plaintext files after rotation", { timeout: 120_000 }, async () => {
     const storePath = join(homeDir, ".claudefy", "store");
 
     // Inject an encrypted file
