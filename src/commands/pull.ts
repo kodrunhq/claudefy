@@ -524,6 +524,7 @@ export class PullCommand {
     result: PullResult,
   ): Promise<void> {
     const storeConfigDir = join(storePath, STORE_CONFIG_DIR);
+    const storeUnknownDir = join(storePath, STORE_UNKNOWN_DIR);
     const { computeDiff, printDiffLines } = await import("../diff-utils/diff-utils.js");
     const tmpStore = join(claudefyDir, ".dryrun-store-tmp");
     const tmpLocal = join(claudefyDir, ".dryrun-local-tmp");
@@ -536,6 +537,10 @@ export class PullCommand {
       if (existsSync(storeConfigDir)) {
         await cp(storeConfigDir, tmpStore, { recursive: true });
         await this.stripAgeExtensionsForDryRun(tmpStore);
+      }
+      // Also include unknown items in the diff comparison
+      if (existsSync(storeUnknownDir)) {
+        await cp(storeUnknownDir, join(tmpStore, STORE_UNKNOWN_DIR), { recursive: true });
       }
       // Copy allowlisted local files
       if (existsSync(this.claudeDir)) {

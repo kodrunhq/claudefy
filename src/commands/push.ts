@@ -32,6 +32,17 @@ export interface PushOptions {
 // These contain downloaded third-party content that can be re-fetched.
 const SYNC_SKIP_DIRS = new Set(["plugins/cache", "plugins/marketplaces"]);
 
+// Registry of items that require path normalization before storing in the remote.
+// Keys are item names as passed to normalizeContent/needsNormalization.
+// Values are the type of normalization to apply.
+type NormalizerType = "settings" | "plugins" | "jsonl";
+const NORMALIZERS: Record<string, NormalizerType> = {
+  "settings.json": "settings",
+  "history.jsonl": "jsonl",
+  "plugins/installed_plugins.json": "plugins",
+  "plugins/known_marketplaces.json": "plugins",
+};
+
 export class PushCommand {
   private homeDir: string;
   private claudeDir: string;
@@ -265,6 +276,7 @@ export class PushCommand {
       }
 
       const encryptor = new Encryptor(options.passphrase, config.backend.url);
+      let encryptedCount = 0;
       for (const filePath of filesToEncrypt) {
         if (existsSync(filePath) && !filePath.endsWith(".age")) {
           const ad = (
@@ -276,11 +288,12 @@ export class PushCommand {
             .join("/");
           await encryptor.encryptFile(filePath, filePath + ".age", ad);
           await rm(filePath);
+          encryptedCount++;
         }
       }
 
       if (!options.quiet) {
-        output.info(`Encrypted ${filesToEncrypt.size} file(s).`);
+        output.info(`Encrypted ${encryptedCount} file(s).`);
       }
     }
 
@@ -364,15 +377,12 @@ export class PushCommand {
   }
 
   private needsNormalization(itemName: string): boolean {
-    return (
-      ["settings.json", "history.jsonl"].includes(itemName) ||
-      itemName === "plugins/installed_plugins.json" ||
-      itemName === "plugins/known_marketplaces.json"
-    );
+    return itemName in NORMALIZERS;
   }
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {
-    if (itemName === "settings.json") {
+    const normalizerType = NORMALIZERS[itemName];
+    if (normalizerType === "settings") {
       let parsed: Record<string, unknown>;
       try {
         parsed = JSON.parse(text);
@@ -382,10 +392,7 @@ export class PushCommand {
       const normalized = pathMapper.normalizeSettingsPaths(parsed, this.claudeDir);
       return JSON.stringify(normalized, null, 2);
     }
-    if (
-      itemName === "plugins/installed_plugins.json" ||
-      itemName === "plugins/known_marketplaces.json"
-    ) {
+    if (normalizerType === "plugins") {
       let parsed: unknown;
       try {
         parsed = JSON.parse(text);
@@ -395,7 +402,7 @@ export class PushCommand {
       const normalized = pathMapper.normalizePluginPaths(parsed, this.claudeDir);
       return JSON.stringify(normalized, null, 2);
     }
-    if (itemName === "history.jsonl") {
+    if (normalizerType === "jsonl") {
       return (
         text
           .split("\n")

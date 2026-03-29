@@ -19,8 +19,8 @@ export class ClaudeJsonSync {
     let parsed: Record<string, unknown>;
     try {
       parsed = JSON.parse(readFileSync(options.claudeJsonPath, "utf-8"));
-    } catch {
-      output.warn("Could not parse ~/.claude.json — skipping sync");
+    } catch (err) {
+      output.warn(`Could not parse ~/.claude.json — skipping sync: ${(err as Error).message}`);
       return {};
     }
 
@@ -48,8 +48,10 @@ export class ClaudeJsonSync {
     if (existsSync(options.claudeJsonPath)) {
       try {
         local = JSON.parse(readFileSync(options.claudeJsonPath, "utf-8"));
-      } catch {
-        output.warn("Could not parse local ~/.claude.json — using empty base");
+      } catch (err) {
+        output.warn(
+          `Could not parse local ~/.claude.json — using empty base: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -60,8 +62,10 @@ export class ClaudeJsonSync {
     let remote: Record<string, unknown>;
     try {
       remote = JSON.parse(readFileSync(options.storePath, "utf-8"));
-    } catch {
-      output.warn("Could not parse stored claude-json-sync.json — skipping merge");
+    } catch (err) {
+      output.warn(
+        `Could not parse stored claude-json-sync.json — skipping merge: ${(err as Error).message}`,
+      );
       return local;
     }
 

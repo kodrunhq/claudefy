@@ -8,7 +8,10 @@ export class Merger {
     return deepmerge(local, remote, {
       arrayMerge: (target: unknown[], source: unknown[]) => {
         // Primitive arrays: strict-equality union
-        if (source.length > 0 && typeof source[0] !== "object") {
+        if (
+          source.length > 0 &&
+          source.every((item) => typeof item !== "object" || item === null)
+        ) {
           const seen = new Set(source);
           const localOnly = target.filter((item) => !seen.has(item));
           return [...source, ...localOnly];
