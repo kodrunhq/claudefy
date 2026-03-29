@@ -70,9 +70,11 @@ describe("DiffCommand", () => {
       });
 
       const cmd = new DiffCommand(homeDir);
-      await cmd.execute({ quiet: false });
-
-      spy.mockRestore();
+      try {
+        await cmd.execute({ quiet: false });
+      } finally {
+        spy.mockRestore();
+      }
 
       // Should report Modified for settings.json
       const output = logs.join("\n");

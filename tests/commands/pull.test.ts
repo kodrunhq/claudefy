@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { PullCommand } from "../../src/commands/pull.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { GitAdapter } from "../../src/git-adapter/git-adapter.js";
-import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -361,24 +361,41 @@ describe("PullCommand", () => {
   });
 
   it("skips path traversal entries in config store during pull", async () => {
-    // First push to populate store
+    // First push to populate store and remote
     const push = new PushCommand(pushHomeDir);
     await push.execute({ quiet: true, skipEncryption: true, skipSecretScan: true });
 
-    // Manually write a file with a ../ name prefix inside the store
+    // Inject a normal file and a symlink into the push machine's store,
+    // then commit+push so the pull machine receives them
     const storePath = join(pushHomeDir, ".claudefy", "store");
     const storeConfigDir = join(storePath, "config");
-    // Git won't store paths with ../ but we test the guard directly via the store
-    // by injecting into the temp copy logic — we test by calling pull with a
-    // malicious entry already in the store directory (simulating a corrupt remote)
     await writeFile(join(storeConfigDir, "normal.txt"), "safe content");
+    // Create a symlink inside the store config dir
+    const evilTarget = join(pushHomeDir, "evil-target");
+    await writeFile(evilTarget, "should not appear in claude dir");
+    await symlink(evilTarget, join(storeConfigDir, "evil-link"));
 
+    // Commit the injected files to git and push to remote
+    const { default: simpleGit } = await import("simple-git");
+    const git = simpleGit(storePath);
+    await git.add(".");
+    await git.commit("inject test artifacts");
+    const branch = (await git.branch()).current;
+    await git.push("origin", branch);
+    // Also merge into main so pullHomeDir can see them
+    await git.checkout("main");
+    await git.merge([branch]);
+    await git.push("origin", "main");
+    await git.checkout(branch);
+
+    // Pull on machine B
     const pull = new PullCommand(pullHomeDir);
     await pull.execute({ quiet: true, skipEncryption: true });
 
-    // Normal files should be copied
     const pullClaudeDir = join(pullHomeDir, ".claude");
-    // The test verifies the pull completes without path traversal errors
-    expect(existsSync(pullClaudeDir)).toBe(true);
+    // Normal files should be copied
+    expect(existsSync(join(pullClaudeDir, "normal.txt"))).toBe(true);
+    // Symlink should NOT be copied — the guard must skip it
+    expect(existsSync(join(pullClaudeDir, "evil-link"))).toBe(false);
   });
 });

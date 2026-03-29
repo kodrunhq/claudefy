@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { output } from "../output.js";
 import type { ClaudefyConfig, LinksConfig, SyncFilterConfig } from "./types.js";
 import {
   CLAUDEFY_DIR,
@@ -29,10 +30,11 @@ function validateConfig(parsed: unknown, filePath: string): asserts parsed is Cl
     throw new Error(`Invalid config file "${filePath}": missing or invalid "version" field.`);
   }
 
-  // Version check — warn if version is newer than supported
-  if (cfg["version"] !== CURRENT_VERSION && typeof cfg["version"] === "number") {
-    // Do not throw — future versions should be loadable, but log a warning context
-    // Future: add migration path when CURRENT_VERSION > 1
+  if (cfg["version"] !== CURRENT_VERSION) {
+    output.warn(
+      `Config version ${cfg["version"]} differs from expected ${CURRENT_VERSION}. ` +
+        `Proceeding, but some features may not work correctly.`,
+    );
   }
 
   if (cfg["backend"] === null || typeof cfg["backend"] !== "object") {
@@ -42,13 +44,14 @@ function validateConfig(parsed: unknown, filePath: string): asserts parsed is Cl
   if (typeof backend["url"] !== "string" || !backend["url"]) {
     throw new Error(`Invalid config file "${filePath}": missing "backend.url" field.`);
   }
+  if (backend["type"] !== "git") {
+    throw new Error(
+      `Invalid config file "${filePath}": "backend.type" must be "git", got "${backend["type"]}".`,
+    );
+  }
 
   if (typeof cfg["machineId"] !== "string" || !cfg["machineId"]) {
     throw new Error(`Invalid config file "${filePath}": missing "machineId" field.`);
-  }
-
-  if (typeof backend["type"] !== "string") {
-    throw new Error(`Invalid config file "${filePath}": missing "backend.type" field.`);
   }
 
   if (cfg["encryption"] === null || typeof cfg["encryption"] !== "object") {
@@ -57,6 +60,16 @@ function validateConfig(parsed: unknown, filePath: string): asserts parsed is Cl
   const encryption = cfg["encryption"] as Record<string, unknown>;
   if (typeof encryption["enabled"] !== "boolean") {
     throw new Error(`Invalid config file "${filePath}": "encryption.enabled" must be a boolean.`);
+  }
+  if (typeof encryption["useKeychain"] !== "boolean") {
+    throw new Error(
+      `Invalid config file "${filePath}": "encryption.useKeychain" must be a boolean.`,
+    );
+  }
+  if (typeof encryption["cacheDuration"] !== "string") {
+    throw new Error(
+      `Invalid config file "${filePath}": "encryption.cacheDuration" must be a string.`,
+    );
   }
 }
 

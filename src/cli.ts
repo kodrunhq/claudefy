@@ -206,7 +206,7 @@ program
       output.heading("claudefy status");
       output.dim("─────────────────────────────────");
       output.info(`Machine:   ${result.machineId ?? "unknown"}`);
-      output.info(`Backend:   ${result.backendUrl ?? "unknown"}`);
+      output.info(`Backend:   ${result.backendUrl ? redactUrl(result.backendUrl) : "unknown"}`);
       output.dim("─────────────────────────────────");
       output.info(
         `Synced     (${result.syncedFiles.length}): ${result.syncedFiles.join(", ") || "none"}`,

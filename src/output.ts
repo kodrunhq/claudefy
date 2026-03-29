@@ -17,14 +17,17 @@ export const output = {
 export function redactUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    if (parsed.username || parsed.password) {
-      parsed.username = "[redacted]";
+    const isHttp = parsed.protocol === "http:" || parsed.protocol === "https:";
+    // Only redact when a password is present, or for HTTP(S) URLs with any userinfo.
+    // SSH URLs (ssh://git@host) have non-secret usernames — leave them as-is.
+    if (parsed.password || (isHttp && parsed.username)) {
+      parsed.username = parsed.username ? "[redacted]" : "";
       parsed.password = "";
       return parsed.toString();
     }
     return url;
   } catch {
-    // Not a standard URL (e.g. SSH git remote) — return as-is
+    // Not a standard URL (e.g. SSH git remote shorthand) — return as-is
     return url;
   }
 }

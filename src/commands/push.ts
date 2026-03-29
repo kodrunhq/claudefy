@@ -377,7 +377,7 @@ export class PushCommand {
   }
 
   private needsNormalization(itemName: string): boolean {
-    return itemName in NORMALIZERS;
+    return Object.prototype.hasOwnProperty.call(NORMALIZERS, itemName);
   }
 
   private normalizeContent(itemName: string, text: string, pathMapper: PathMapper): string {

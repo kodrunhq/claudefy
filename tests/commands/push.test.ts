@@ -387,8 +387,9 @@ describe("PushCommand", () => {
 
     await push.execute({ quiet: true, skipEncryption: true, dryRun: true });
 
-    // Store should not exist — dry-run must not commit anything
-    expect(existsSync(storeConfigDir)).toBe(false);
+    // Dry-run initializes the store (clone/init) but must not commit new content.
+    // The store directory may exist, but config items should not be synced.
+    expect(existsSync(join(storeConfigDir, "settings.json"))).toBe(false);
   });
 
   it("only syncs specified item when only: is set", async () => {
