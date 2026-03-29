@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -97,6 +97,12 @@ export class MachineRegistry {
 
   private async saveManifest(manifest: Manifest): Promise<void> {
     await mkdir(dirname(this.manifestPath), { recursive: true });
-    await writeFile(this.manifestPath, JSON.stringify(manifest, null, 2));
+    const tmp = `${this.manifestPath}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify(manifest, null, 2));
+      await rename(tmp, this.manifestPath);
+    } finally {
+      await rm(tmp, { force: true });
+    }
   }
 }

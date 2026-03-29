@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -154,14 +154,35 @@ export class ConfigManager {
   }
 
   private async saveConfig(config: ClaudefyConfig): Promise<void> {
-    await writeFile(join(this.configDir, CONFIG_FILE), JSON.stringify(config, null, 2));
+    const dest = join(this.configDir, CONFIG_FILE);
+    const tmp = `${dest}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify(config, null, 2));
+      await rename(tmp, dest);
+    } finally {
+      await rm(tmp, { force: true });
+    }
   }
 
   private async saveLinks(links: LinksConfig): Promise<void> {
-    await writeFile(join(this.configDir, LINKS_FILE), JSON.stringify(links, null, 2));
+    const dest = join(this.configDir, LINKS_FILE);
+    const tmp = `${dest}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify(links, null, 2));
+      await rename(tmp, dest);
+    } finally {
+      await rm(tmp, { force: true });
+    }
   }
 
   private async saveSyncFilter(filter: SyncFilterConfig): Promise<void> {
-    await writeFile(join(this.configDir, SYNC_FILTER_FILE), JSON.stringify(filter, null, 2));
+    const dest = join(this.configDir, SYNC_FILTER_FILE);
+    const tmp = `${dest}.tmp`;
+    try {
+      await writeFile(tmp, JSON.stringify(filter, null, 2));
+      await rename(tmp, dest);
+    } finally {
+      await rm(tmp, { force: true });
+    }
   }
 }
