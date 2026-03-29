@@ -43,11 +43,11 @@ async function getCachedVersion(claudefyDir: string): Promise<string | null> {
 
 export function isNewer(latest: string, current: string): boolean {
   const parseSegment = (s: string) => parseInt(s, 10) || 0;
-  const l = latest.split(".").map(parseSegment);
-  const c = current.split(".").map(parseSegment);
+  const latestParts = latest.split(".").map(parseSegment);
+  const currentParts = current.split(".").map(parseSegment);
   for (let i = 0; i < 3; i++) {
-    if ((l[i] ?? 0) > (c[i] ?? 0)) return true;
-    if ((l[i] ?? 0) < (c[i] ?? 0)) return false;
+    if ((latestParts[i] ?? 0) > (currentParts[i] ?? 0)) return true;
+    if ((latestParts[i] ?? 0) < (currentParts[i] ?? 0)) return false;
   }
   return false;
 }

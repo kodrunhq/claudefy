@@ -24,22 +24,7 @@ export class MachineRegistry {
 
   async register(machineId: string, hostname: string, os: string): Promise<void> {
     const manifest = await this.loadManifest();
-    const existing = manifest.machines.find((m) => m.machineId === machineId);
-
-    if (existing) {
-      existing.hostname = hostname;
-      existing.os = os;
-      existing.lastSync = new Date().toISOString();
-    } else {
-      manifest.machines.push({
-        machineId,
-        hostname,
-        os,
-        lastSync: new Date().toISOString(),
-        registeredAt: new Date().toISOString(),
-      });
-    }
-
+    this.upsertMachine(manifest, machineId, hostname, os, true);
     await this.saveManifest(manifest);
   }
 
@@ -51,7 +36,24 @@ export class MachineRegistry {
   ): Promise<void> {
     const manifest = await this.loadManifest();
     const existing = manifest.machines.find((m) => m.machineId === machineId);
+    if (existing && !shouldUpdate) return;
+    this.upsertMachine(manifest, machineId, hostname, os, shouldUpdate);
+    await this.saveManifest(manifest);
+  }
 
+  /**
+   * Upsert a machine entry in the manifest.
+   * If the machine already exists and `shouldUpdate` is true, updates its fields.
+   * If it does not exist, inserts a new entry unconditionally.
+   */
+  private upsertMachine(
+    manifest: Manifest,
+    machineId: string,
+    hostname: string,
+    os: string,
+    shouldUpdate: boolean,
+  ): void {
+    const existing = manifest.machines.find((m) => m.machineId === machineId);
     if (existing) {
       if (!shouldUpdate) return;
       existing.hostname = hostname;
@@ -66,8 +68,6 @@ export class MachineRegistry {
         registeredAt: new Date().toISOString(),
       });
     }
-
-    await this.saveManifest(manifest);
   }
 
   async list(): Promise<MachineEntry[]> {

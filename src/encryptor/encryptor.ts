@@ -56,16 +56,16 @@ export class Encryptor {
   }
 
   async encryptDirectory(dirPath: string): Promise<void> {
-    await this._encryptDirRecursive(dirPath, dirPath);
+    await this.encryptDirRecursive(dirPath, dirPath);
   }
 
-  private async _encryptDirRecursive(dirPath: string, rootPath: string): Promise<void> {
+  private async encryptDirRecursive(dirPath: string, rootPath: string): Promise<void> {
     const entries = await readdir(dirPath, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
       const fullPath = join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        await this._encryptDirRecursive(fullPath, rootPath);
+        await this.encryptDirRecursive(fullPath, rootPath);
       } else if (!entry.name.endsWith(".age")) {
         const ad = relative(rootPath, fullPath).split(sep).join("/");
         await this.encryptFile(fullPath, fullPath + ".age", ad);
@@ -75,7 +75,7 @@ export class Encryptor {
   }
 
   async decryptDirectory(dirPath: string): Promise<void> {
-    const { total, failCount } = await this._decryptDirRecursive(dirPath, dirPath);
+    const { total, failCount } = await this.decryptDirRecursive(dirPath, dirPath);
     if (total > 0 && failCount === total) {
       throw new Error(
         `Passphrase appears incorrect: all ${total} encrypted file(s) failed to decrypt. ` +
@@ -84,7 +84,7 @@ export class Encryptor {
     }
   }
 
-  private async _decryptDirRecursive(
+  private async decryptDirRecursive(
     dirPath: string,
     rootPath: string,
   ): Promise<{ total: number; failCount: number }> {
@@ -95,7 +95,7 @@ export class Encryptor {
       if (entry.isSymbolicLink()) continue;
       const fullPath = join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        const sub = await this._decryptDirRecursive(fullPath, rootPath);
+        const sub = await this.decryptDirRecursive(fullPath, rootPath);
         total += sub.total;
         failCount += sub.failCount;
       } else if (entry.name.endsWith(".age")) {

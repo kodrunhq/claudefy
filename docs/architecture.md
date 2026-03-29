@@ -34,7 +34,13 @@ src/
 ├── backup-manager/         Snapshot creation and restoration
 ├── hook-manager/           SessionStart/SessionEnd hooks
 ├── git-identity/           Git remote detection for links
-└── repo-creator/           Auto-create GitHub/GitLab repos
+├── repo-creator/           Auto-create GitHub/GitLab repos
+├── claude-json-sync/       ~/.claude.json sync (theme, mcpServers opt-in)
+├── diff-utils/             Shared diff computation and colored output
+├── lockfile/               PID-based lock to prevent concurrent operations
+├── logger/                 Rotating JSONL log writer (sync.log)
+├── output.ts               Typed output helpers (success/info/warn/error)
+└── update-check.ts         Background npm version check
 ```
 
 ## Data Flow
@@ -167,6 +173,11 @@ CLI (commander)
      ├─ Merger (deepmerge)
      ├─ BackupManager
      ├─ HookManager
+     ├─ ClaudeJsonSync
+     ├─ DiffUtils
+     ├─ Lockfile
+     ├─ Logger
+     ├─ Output
      └─ RepoCreator (gh / glab CLI)
 ```
 

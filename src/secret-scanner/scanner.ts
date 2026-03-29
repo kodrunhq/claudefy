@@ -57,8 +57,8 @@ const SECRET_PATTERNS: SecretPattern[] = [
 export class SecretScanner {
   private readonly patterns: SecretPattern[];
 
-  constructor(customPatterns: CustomPattern[] = []) {
-    const custom = customPatterns.map((p) => {
+  constructor(customPatterns?: CustomPattern[]) {
+    const custom = (customPatterns ?? []).map((p) => {
       try {
         return { name: p.name, regex: new RegExp(p.regex, p.flags) };
       } catch (e) {

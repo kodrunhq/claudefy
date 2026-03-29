@@ -17,19 +17,29 @@ export class SyncFilter {
   async classify(claudeDir: string): Promise<ClassificationResult> {
     const entries = await readdir(claudeDir, { withFileTypes: true });
 
-    const items: ClassifiedItem[] = await Promise.all(
+    const settled = await Promise.all(
       entries.map(async (entry) => {
         const tier = this.getTier(entry.name);
         const fullPath = join(claudeDir, entry.name);
-        const stats = await lstat(fullPath);
-        return {
-          name: entry.name,
-          tier,
-          isDirectory: entry.isDirectory(),
-          sizeBytes: stats.size,
-        };
+        try {
+          const stats = await lstat(fullPath);
+          return {
+            name: entry.name,
+            tier,
+            isDirectory: entry.isDirectory(),
+            sizeBytes: stats.size,
+          } satisfies ClassifiedItem;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+            // File removed between readdir and lstat — skip it
+            return null;
+          }
+          throw err;
+        }
       }),
     );
+
+    const items: ClassifiedItem[] = settled.filter((item): item is ClassifiedItem => item !== null);
 
     return {
       items,
