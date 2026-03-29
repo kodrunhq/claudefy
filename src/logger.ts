@@ -19,6 +19,18 @@ export interface ReadRecentFilter {
   operation?: string;
 }
 
+function isLogEntry(value: unknown): value is LogEntry {
+  if (value === null || typeof value !== "object") return false;
+  const e = value as Record<string, unknown>;
+  return (
+    typeof e["timestamp"] === "string" &&
+    typeof e["level"] === "string" &&
+    (e["level"] === "info" || e["level"] === "warn" || e["level"] === "error") &&
+    typeof e["operation"] === "string" &&
+    typeof e["message"] === "string"
+  );
+}
+
 export class Logger {
   private readonly filePath: string;
   private readonly maxBytes: number;
@@ -64,7 +76,9 @@ export class Logger {
       .filter(Boolean)
       .map((line) => {
         try {
-          return JSON.parse(line) as LogEntry;
+          const parsed: unknown = JSON.parse(line);
+          if (!isLogEntry(parsed)) return null;
+          return parsed;
         } catch {
           return null;
         }

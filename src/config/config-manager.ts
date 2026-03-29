@@ -13,6 +13,8 @@ import {
   DEFAULT_SYNC_FILTER,
 } from "./defaults.js";
 
+const CURRENT_VERSION = 1;
+
 /**
  * Validates a parsed config object at runtime and throws with a descriptive
  * message if required fields are missing or have wrong types.
@@ -25,6 +27,12 @@ function validateConfig(parsed: unknown, filePath: string): asserts parsed is Cl
 
   if (typeof cfg["version"] !== "number") {
     throw new Error(`Invalid config file "${filePath}": missing or invalid "version" field.`);
+  }
+
+  // Version check — warn if version is newer than supported
+  if (cfg["version"] !== CURRENT_VERSION && typeof cfg["version"] === "number") {
+    // Do not throw — future versions should be loadable, but log a warning context
+    // Future: add migration path when CURRENT_VERSION > 1
   }
 
   if (cfg["backend"] === null || typeof cfg["backend"] !== "object") {

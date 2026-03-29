@@ -43,7 +43,17 @@ export class Lockfile {
     if (existsSync(lockPath)) {
       try {
         const raw = readFileSync(lockPath, "utf-8");
-        const info: LockInfo = JSON.parse(raw);
+        const parsed: unknown = JSON.parse(raw);
+        if (
+          parsed === null ||
+          typeof parsed !== "object" ||
+          typeof (parsed as Record<string, unknown>)["pid"] !== "number" ||
+          typeof (parsed as Record<string, unknown>)["startedAt"] !== "string"
+        ) {
+          unlinkSync(lockPath);
+          return null;
+        }
+        const info: LockInfo = parsed as LockInfo;
         const age = Date.now() - new Date(info.startedAt).getTime();
 
         if (isPidAlive(info.pid) && age < MAX_LOCK_AGE_MS) {

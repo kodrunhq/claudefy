@@ -67,6 +67,15 @@ export async function isKeychainAvailable(): Promise<boolean> {
 }
 
 export function prompt(question: string, hidden = false): Promise<string> {
+  if (hidden && !process.stdin.isTTY) {
+    return Promise.reject(
+      new Error(
+        "Cannot prompt for passphrase in non-interactive mode. " +
+          "Set the CLAUDEFY_PASSPHRASE environment variable or store it in your OS keychain.",
+      ),
+    );
+  }
+
   return new Promise((resolve) => {
     const rl = createInterface({
       input: process.stdin,

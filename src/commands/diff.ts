@@ -6,7 +6,6 @@ import { SyncFilter } from "../sync-filter/sync-filter.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { computeDiff, printDiffLines } from "../diff-utils/diff-utils.js";
 import type { DiffResult } from "../diff-utils/diff-utils.js";
-import chalk from "chalk";
 import { output } from "../output.js";
 import { STORE_CONFIG_DIR } from "../config/defaults.js";
 

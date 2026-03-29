@@ -82,6 +82,7 @@ export class RotatePassphraseCommand {
           } catch (err) {
             throw new Error(
               `Rotation aborted after ${phase1Succeeded} of ${ageFiles.length} files before failure: ${(err as Error).message}`,
+              { cause: err },
             );
           }
         }

@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
-import chalk from "chalk";
 import { ConfigManager } from "../config/config-manager.js";
 import { SyncFilter } from "../sync-filter/sync-filter.js";
 import type { ClassificationResult } from "../sync-filter/types.js";
@@ -82,6 +81,18 @@ export class PushCommand {
       output.warn(
         "Encryption is enabled in config but --skip-encryption flag is set.\n" +
           "  Files will be pushed/pulled WITHOUT encryption. Use only for testing.",
+      );
+    }
+
+    // Warn when skipping secret scan in reactive encryption mode — secrets will not be encrypted
+    if (
+      options.skipSecretScan &&
+      config.encryption.enabled &&
+      (config.encryption.mode === "reactive" || config.encryption.mode == null)
+    ) {
+      output.warn(
+        "WARNING: --skip-secret-scan is set while encryption.mode is reactive.\n" +
+          "  Secret detection drives reactive encryption — files with secrets will NOT be encrypted.",
       );
     }
 

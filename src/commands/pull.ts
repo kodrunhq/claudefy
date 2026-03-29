@@ -1,7 +1,6 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import chalk from "chalk";
 import { simpleGit } from "simple-git";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
@@ -467,8 +466,17 @@ export class PullCommand {
       const git = simpleGit(storePath);
       // Use git show to read .override from main without switching branches
       const content = await git.show(["main:.override"]);
-      const marker = JSON.parse(content);
-      return { machine: marker.machine, timestamp: marker.timestamp };
+      const marker: unknown = JSON.parse(content);
+      if (
+        marker !== null &&
+        typeof marker === "object" &&
+        typeof (marker as Record<string, unknown>)["machine"] === "string" &&
+        typeof (marker as Record<string, unknown>)["timestamp"] === "string"
+      ) {
+        const m = marker as Record<string, unknown>;
+        return { machine: m["machine"] as string, timestamp: m["timestamp"] as string };
+      }
+      return null;
     } catch {
       return null;
     }

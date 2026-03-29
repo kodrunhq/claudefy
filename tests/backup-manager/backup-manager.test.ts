@@ -57,4 +57,42 @@ describe("BackupManager", () => {
     const backups = await backupManager.listBackups();
     expect(backups.length).toBe(2);
   });
+
+  it("prune keeps only maxCount newest backups", async () => {
+    await writeFile(join(claudeDir, "settings.json"), "{}");
+    const backupManager = new BackupManager(claudefyDir);
+
+    await backupManager.createBackup(claudeDir, "first");
+    await new Promise((r) => setTimeout(r, 10));
+    await backupManager.createBackup(claudeDir, "second");
+    await new Promise((r) => setTimeout(r, 10));
+    await backupManager.createBackup(claudeDir, "third");
+
+    await backupManager.prune({ maxCount: 2 });
+
+    const remaining = await backupManager.listBackups();
+    expect(remaining.length).toBe(2);
+  });
+
+  it("prune removes backups older than maxAgeDays", async () => {
+    await writeFile(join(claudeDir, "settings.json"), "{}");
+    const backupManager = new BackupManager(claudefyDir);
+
+    // Create a backup
+    const backupPath = await backupManager.createBackup(claudeDir, "old-backup");
+
+    // Artificially age the backup by setting its mtime to 10 days ago
+    const { utimes } = await import("node:fs/promises");
+    const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    await utimes(backupPath, tenDaysAgo, tenDaysAgo);
+
+    // Create a recent backup
+    await backupManager.createBackup(claudeDir, "new-backup");
+
+    await backupManager.prune({ maxAgeDays: 5 });
+
+    const remaining = await backupManager.listBackups();
+    expect(remaining.length).toBe(1);
+    expect(remaining[0]).toContain("new-backup");
+  });
 });

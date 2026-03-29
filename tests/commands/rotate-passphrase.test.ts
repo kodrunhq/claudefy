@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { RotatePassphraseCommand } from "../../src/commands/rotate-passphrase.js";
 import { PushCommand } from "../../src/commands/push.js";
 import { Encryptor } from "../../src/encryptor/encryptor.js";
-import { mkdtemp, rm, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
@@ -14,7 +14,6 @@ describe("RotatePassphraseCommand", () => {
   let remoteDir: string;
   const oldPass = "old-passphrase-123";
   const newPass = "new-passphrase-456";
-  const backendUrl = "";
 
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-rotate-test-"));
