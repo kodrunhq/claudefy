@@ -50,6 +50,7 @@ export class RotatePassphraseCommand {
 
       const gitAdapter = new GitAdapter(claudefyDir);
       await gitAdapter.initStore(config.backend.url);
+      await gitAdapter.ensureMachineBranch(config.machineId);
       const storePath = gitAdapter.getStorePath();
 
       const ageFiles = await this.collectAgeFiles(storePath);

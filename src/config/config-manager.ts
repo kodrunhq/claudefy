@@ -13,6 +13,33 @@ import {
   DEFAULT_SYNC_FILTER,
 } from "./defaults.js";
 
+/**
+ * Validates a parsed config object at runtime and throws with a descriptive
+ * message if required fields are missing or have wrong types.
+ */
+function validateConfig(parsed: unknown, filePath: string): asserts parsed is ClaudefyConfig {
+  if (parsed === null || typeof parsed !== "object") {
+    throw new Error(`Invalid config file "${filePath}": expected an object.`);
+  }
+  const cfg = parsed as Record<string, unknown>;
+
+  if (typeof cfg["version"] !== "number") {
+    throw new Error(`Invalid config file "${filePath}": missing or invalid "version" field.`);
+  }
+
+  if (cfg["backend"] === null || typeof cfg["backend"] !== "object") {
+    throw new Error(`Invalid config file "${filePath}": missing "backend" field.`);
+  }
+  const backend = cfg["backend"] as Record<string, unknown>;
+  if (typeof backend["url"] !== "string" || !backend["url"]) {
+    throw new Error(`Invalid config file "${filePath}": missing "backend.url" field.`);
+  }
+
+  if (typeof cfg["machineId"] !== "string" || !cfg["machineId"]) {
+    throw new Error(`Invalid config file "${filePath}": missing "machineId" field.`);
+  }
+}
+
 export class ConfigManager {
   private baseDir: string;
   private configDir: string;
@@ -58,14 +85,17 @@ export class ConfigManager {
   async load(): Promise<ClaudefyConfig> {
     const path = join(this.configDir, CONFIG_FILE);
     const raw = await readFile(path, "utf-8");
+    let parsed: unknown;
     try {
-      return JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch (err) {
       throw new Error(
         `Corrupt config file "${path}": ${(err as Error).message}. Delete and re-run 'claudefy init'.`,
         { cause: err },
       );
     }
+    validateConfig(parsed, path);
+    return parsed as ClaudefyConfig;
   }
 
   async set(key: string, value: unknown): Promise<void> {

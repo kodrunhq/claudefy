@@ -31,6 +31,17 @@ export interface PullResult {
   filesUpdated: number;
 }
 
+// Keys stripped from ALL settings.json files (top-level and per-project) during pull.
+// Per CLAUDE.md spec: prevent remote code injection via hooks/mcpServers/env/permissions.
+const DANGEROUS_KEYS = [
+  "hooks",
+  "mcpServers",
+  "env",
+  "permissions",
+  "allowedTools",
+  "apiKeyHelper",
+] as const;
+
 export class PullCommand {
   private homeDir: string;
   private claudeDir: string;
@@ -324,6 +335,9 @@ export class PullCommand {
           }
         }
 
+        // Security: strip DANGEROUS_KEYS from all project-level settings.json files
+        await this.stripDangerousKeysFromProjects(projectsDir);
+
         if (interruptedSignal) break;
 
         // 7. Merge and copy to ~/.claude
@@ -343,14 +357,6 @@ export class PullCommand {
           }
 
           // Security: strip keys that can execute code or modify permissions
-          const DANGEROUS_KEYS = [
-            "hooks",
-            "mcpServers",
-            "env",
-            "permissions",
-            "allowedTools",
-            "apiKeyHelper",
-          ];
           if (remoteSettings && typeof remoteSettings === "object") {
             for (const key of DANGEROUS_KEYS) {
               if (key in remoteSettings) {
@@ -559,6 +565,34 @@ export class PullCommand {
         await rm(fullPath);
         await writeFile(newPath, "[encrypted content]");
       }
+    }
+  }
+
+  /**
+   * Recursively strip DANGEROUS_KEYS from settings.json files inside projects/ subdirectories.
+   * This prevents per-project settings from injecting hooks/mcpServers from a remote attacker.
+   */
+  private async stripDangerousKeysFromProjects(projectsDir: string): Promise<void> {
+    if (!existsSync(projectsDir)) return;
+    const projectDirs = await readdir(projectsDir, { withFileTypes: true });
+    for (const entry of projectDirs) {
+      if (!entry.isDirectory()) continue;
+      const settingsPath = join(projectsDir, entry.name, "settings.json");
+      if (!existsSync(settingsPath)) continue;
+      let settings: Record<string, unknown>;
+      try {
+        settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+      } catch {
+        continue; // Malformed JSON — skip silently
+      }
+      if (settings && typeof settings === "object") {
+        for (const key of DANGEROUS_KEYS) {
+          if (key in settings) {
+            delete settings[key];
+          }
+        }
+      }
+      await writeFile(settingsPath, JSON.stringify(settings, null, 2));
     }
   }
 }

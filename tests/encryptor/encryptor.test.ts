@@ -188,6 +188,22 @@ describe("Encryptor", () => {
     await expect(encryptor.decryptDirectory(tempDir)).resolves.not.toThrow();
   });
 
+  it("decryptDirectory throws when wrong passphrase causes all files to fail", async () => {
+    const encryptor1 = new Encryptor("correct-pass", "test-repo");
+    const encryptor2 = new Encryptor("wrong-pass", "test-repo");
+
+    await writeFile(join(tempDir, "secret.txt"), "sensitive data");
+    await encryptor1.encryptDirectory(tempDir);
+
+    // All .age files were encrypted with encryptor1 — wrong passphrase should throw
+    await expect(encryptor2.decryptDirectory(tempDir)).rejects.toThrow(
+      /wrong.*passphrase|incorrect|failed to decrypt/i,
+    );
+
+    // The .age file must still exist (not deleted on failure)
+    expect(existsSync(join(tempDir, "secret.txt.age"))).toBe(true);
+  });
+
   it("round-trips .jsonl files through encrypt/decrypt", async () => {
     const encryptor = new Encryptor(passphrase, "test-repo");
     const jsonlContent = '{"a":1}\n{"b":2}\n{"c":3}\n';
