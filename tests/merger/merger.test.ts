@@ -94,5 +94,20 @@ describe("Merger", () => {
       const result = merger.deepMergeJson(local, remote);
       expect(result.items).toEqual([{ name: "a", value: 1 }]);
     });
+
+    it("handles null remote value — remote null overwrites local array", () => {
+      const local = { key: [1, 2] };
+      const remote = { key: null };
+      const result = merger.deepMergeJson(local, remote as Record<string, unknown>);
+      // deepmerge treats null as a scalar: remote null overwrites local array
+      expect(result.key).toBeNull();
+    });
+
+    it("handles null local value — remote wins with string", () => {
+      const local = { key: null };
+      const remote = { key: "val" };
+      const result = merger.deepMergeJson(local as Record<string, unknown>, remote);
+      expect(result.key).toBe("val");
+    });
   });
 });

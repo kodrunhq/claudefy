@@ -240,4 +240,45 @@ describe("GitAdapter", () => {
 
     await rm(verifyDir, { recursive: true, force: true });
   });
+
+  it("returns pushed=false and captures pushError when push is rejected", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+    await adapter.ensureMachineBranch("push-fail-machine");
+
+    // Step 1: Push an initial commit so the machine branch exists on remote
+    await writeFile(join(localDir, "store", "first.txt"), "first");
+    const localGit = simpleGit(join(localDir, "store"));
+    await localGit.add(".");
+    await localGit.commit("first commit");
+    await localGit.push(["-u", "origin", "machines/push-fail-machine"]);
+
+    // Step 2: Clone remote in another dir and push a diverging commit to same machine branch
+    const otherDir = await mkdtemp(join(tmpdir(), "claudefy-diverge-"));
+    try {
+      const otherGit = simpleGit(otherDir);
+      await otherGit.clone(remoteDir, ".");
+      await otherGit.checkout([
+        "-b",
+        "machines/push-fail-machine",
+        "origin/machines/push-fail-machine",
+      ]);
+      await writeFile(join(otherDir, "diverge.txt"), "diverge");
+      await otherGit.add(".");
+      await otherGit.commit("diverging commit");
+      await otherGit.push("origin", "machines/push-fail-machine");
+    } finally {
+      await rm(otherDir, { recursive: true, force: true });
+    }
+
+    // Step 3: Local is now behind remote. Add an uncommitted file and let commitAndPush handle it.
+    await writeFile(join(localDir, "store", "local-after-diverge.txt"), "local");
+
+    // commitAndPush should commit the new file and then fail the push (non-fast-forward)
+    const result = await adapter.commitAndPush("should fail push", "push-fail-machine");
+
+    expect(result.committed).toBe(true);
+    expect(result.pushed).toBe(false);
+    expect(result.pushError).toBeDefined();
+  });
 });

@@ -381,6 +381,27 @@ describe("PushCommand", () => {
     await rm(verifyDir, { recursive: true, force: true });
   });
 
+  it("dry-run does not modify store when dryRun: true", async () => {
+    const push = new PushCommand(homeDir);
+    const storeConfigDir = join(homeDir, ".claudefy", "store", "config");
+
+    await push.execute({ quiet: true, skipEncryption: true, dryRun: true });
+
+    // Store should not exist — dry-run must not commit anything
+    expect(existsSync(storeConfigDir)).toBe(false);
+  });
+
+  it("only syncs specified item when only: is set", async () => {
+    const push = new PushCommand(homeDir);
+    await push.execute({ quiet: true, skipEncryption: true, only: "settings.json" });
+
+    const storeConfigDir = join(homeDir, ".claudefy", "store", "config");
+    // settings.json should exist in store
+    expect(existsSync(join(storeConfigDir, "settings.json"))).toBe(true);
+    // other items should not be in store
+    expect(existsSync(join(storeConfigDir, "commands"))).toBe(false);
+  });
+
   it("skips unchanged files on second push (incremental)", async () => {
     const push = new PushCommand(homeDir);
     await push.execute({ quiet: true, skipEncryption: true });
