@@ -84,7 +84,16 @@ export class MachineRegistry {
       return { version: 1, machines: [] };
     }
     try {
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (
+        parsed !== null &&
+        typeof parsed === "object" &&
+        !Array.isArray(parsed) &&
+        Array.isArray(parsed.machines)
+      ) {
+        return parsed as Manifest;
+      }
+      return { version: 1, machines: [] };
     } catch (err) {
       if (err instanceof SyntaxError) {
         throw new Error(`Invalid manifest JSON in "${this.manifestPath}": ${err.message}`, {

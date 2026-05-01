@@ -157,6 +157,20 @@ describe("GitAdapter", () => {
     expect(result.mergedToMain).toBe(false);
   });
 
+  it("isClean detects untracked files without staging them", async () => {
+    const adapter = new GitAdapter(localDir);
+    await adapter.initStore(remoteDir);
+
+    const storePath = adapter.getStorePath();
+    await writeFile(join(storePath, "untracked.txt"), "untracked");
+
+    await expect(adapter.isClean()).resolves.toBe(false);
+
+    const status = await simpleGit(storePath).status();
+    expect(status.not_added).toContain("untracked.txt");
+    expect(status.staged).toEqual([]);
+  });
+
   it("commitAndPush without machineId behaves like legacy mode", async () => {
     const adapter = new GitAdapter(localDir);
     await adapter.initStore(remoteDir);

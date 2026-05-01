@@ -5,6 +5,7 @@ import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("DiffCommand", () => {
   let homeDir: string;
@@ -35,7 +36,7 @@ describe("DiffCommand", () => {
       await simpleGit(remoteDir).init(true, ["-b", "main"]);
 
       const claudeDir = join(homeDir, ".claude");
-      const claudefyDir = join(homeDir, ".claudefy");
+      const claudefyDir = join(homeDir, CLAUDEFY_DIR);
 
       await mkdir(claudeDir, { recursive: true });
       await writeFile(join(claudeDir, "settings.json"), JSON.stringify({ theme: "dark" }));

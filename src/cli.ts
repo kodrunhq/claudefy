@@ -10,6 +10,7 @@ import type { PackageJson } from "./types.js";
 import { resolvePassphrase } from "./encryptor/passphrase.js";
 import { Logger } from "./logger.js";
 import type { ReadRecentFilter } from "./logger.js";
+import { CLAUDEFY_DIR } from "./config/defaults.js";
 
 // eslint-disable-next-line no-control-regex
 const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07\x1b]*[\x07\x1b\\]|\x1b[@-_]/g;
@@ -22,7 +23,7 @@ const pkg = require("../package.json") as PackageJson;
 
 const program = new Command();
 const homeDir = homedir();
-const syncLogger = new Logger(join(homeDir, ".claudefy", "logs", "sync.log"));
+const syncLogger = new Logger(join(homeDir, CLAUDEFY_DIR, "logs", "sync.log"));
 
 async function getGlobalOpts(cmd: Command): Promise<{
   quiet: boolean;
@@ -39,7 +40,7 @@ async function getGlobalOpts(cmd: Command): Promise<{
   let passphrase: string | undefined;
   if (!skipEncryption) {
     let useKeychain = false;
-    const configPath = join(homeDir, ".claudefy", "config.json");
+    const configPath = join(homeDir, CLAUDEFY_DIR, "config.json");
     if (existsSync(configPath)) {
       try {
         const config = JSON.parse(await readFile(configPath, "utf-8"));
@@ -403,30 +404,35 @@ program
   .option("--errors", "Show only errors")
   .option("--operation <op>", "Filter by operation (push/pull)")
   .action(async (options) => {
-    const filter: ReadRecentFilter = {};
-    if (options.errors) filter.level = "error";
-    if (options.operation) filter.operation = options.operation;
-    const count = parseInt(options.count, 10);
-    if (isNaN(count) || count < 1) {
-      output.error("--count must be a positive integer");
-      return;
-    }
-    const entries = await syncLogger.readRecent(count, filter);
-    if (entries.length === 0) {
-      output.dim("No log entries found.");
-      return;
-    }
-    for (const entry of entries) {
-      const time = entry.timestamp.replace("T", " ").replace(/\.\d+Z$/, "Z");
-      const levelColor =
-        entry.level === "error"
-          ? chalk.red(entry.level.toUpperCase())
-          : entry.level === "warn"
-            ? chalk.yellow(entry.level.toUpperCase())
-            : chalk.blue(entry.level.toUpperCase());
-      console.log(
-        `${chalk.dim(time)} ${levelColor} [${entry.operation}] ${stripAnsi(entry.message)}`,
-      );
+    try {
+      const filter: ReadRecentFilter = {};
+      if (options.errors) filter.level = "error";
+      if (options.operation) filter.operation = options.operation;
+      const count = parseInt(options.count, 10);
+      if (isNaN(count) || count < 1) {
+        output.error("--count must be a positive integer");
+        return;
+      }
+      const entries = await syncLogger.readRecent(count, filter);
+      if (entries.length === 0) {
+        output.dim("No log entries found.");
+        return;
+      }
+      for (const entry of entries) {
+        const time = entry.timestamp.replace("T", " ").replace(/\.\d+Z$/, "Z");
+        const levelColor =
+          entry.level === "error"
+            ? chalk.red(entry.level.toUpperCase())
+            : entry.level === "warn"
+              ? chalk.yellow(entry.level.toUpperCase())
+              : chalk.blue(entry.level.toUpperCase());
+        console.log(
+          `${chalk.dim(time)} ${levelColor} [${entry.operation}] ${stripAnsi(entry.message)}`,
+        );
+      }
+    } catch (err: unknown) {
+      output.error(err instanceof Error ? err.message : String(err));
+      process.exit(1);
     }
   });
 

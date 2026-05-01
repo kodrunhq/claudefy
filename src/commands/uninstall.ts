@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 import { ConfigManager } from "../config/config-manager.js";
 import { HookManager } from "../hook-manager/hook-manager.js";
 import { output } from "../output.js";
+import { CLAUDEFY_DIR } from "../config/defaults.js";
 
 export interface UninstallOptions {
   confirm?: boolean;
@@ -19,7 +20,7 @@ export class UninstallCommand {
   }
 
   async execute(options: UninstallOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
 
     if (!existsSync(claudefyDir)) {
       if (!options.quiet)

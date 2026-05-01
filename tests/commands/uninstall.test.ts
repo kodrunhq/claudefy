@@ -4,6 +4,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("UninstallCommand", () => {
   let homeDir: string;
@@ -13,7 +14,7 @@ describe("UninstallCommand", () => {
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-uninstall-test-"));
     claudeDir = join(homeDir, ".claude");
-    claudefyDir = join(homeDir, ".claudefy");
+    claudefyDir = join(homeDir, CLAUDEFY_DIR);
 
     // Create ~/.claude with settings.json
     await mkdir(claudeDir, { recursive: true });

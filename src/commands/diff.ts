@@ -7,7 +7,7 @@ import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { computeDiff, printDiffLines } from "../diff-utils/diff-utils.js";
 import type { DiffResult } from "../diff-utils/diff-utils.js";
 import { output } from "../output.js";
-import { STORE_CONFIG_DIR } from "../config/defaults.js";
+import { CLAUDEFY_DIR, STORE_CONFIG_DIR } from "../config/defaults.js";
 
 export interface DiffOptions {
   quiet: boolean;
@@ -39,7 +39,7 @@ export class DiffCommand {
     }
 
     const config = await this.configManager.load();
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
 
     const gitAdapter = new GitAdapter(claudefyDir);
     await gitAdapter.initStore(config.backend.url);
@@ -112,7 +112,7 @@ export class DiffCommand {
   private async computePullDiff(storeDir: string, localDir: string): Promise<DiffResult> {
     // Create a temp copy of storeDir with .age suffixes stripped from names
     // so the diff compares logical file names rather than encrypted filenames.
-    const tmpStoreDir = join(this.homeDir, ".claudefy", ".diff-store-tmp");
+    const tmpStoreDir = join(this.homeDir, CLAUDEFY_DIR, ".diff-store-tmp");
     if (existsSync(tmpStoreDir)) await rm(tmpStoreDir, { recursive: true, force: true });
     await mkdir(tmpStoreDir, { recursive: true });
 

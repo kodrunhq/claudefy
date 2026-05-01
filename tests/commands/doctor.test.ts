@@ -3,6 +3,7 @@ import { DoctorCommand } from "../../src/commands/doctor.js";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("DoctorCommand", () => {
   let homeDir: string;
@@ -32,7 +33,7 @@ describe("DoctorCommand", () => {
   });
 
   it("reports initialized when config exists", async () => {
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(claudefyDir, { recursive: true });
     await writeFile(
       join(claudefyDir, "config.json"),
@@ -51,7 +52,7 @@ describe("DoctorCommand", () => {
   });
 
   it("reports encryption status", async () => {
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(claudefyDir, { recursive: true });
     await writeFile(
       join(claudefyDir, "config.json"),
@@ -72,7 +73,7 @@ describe("DoctorCommand", () => {
   });
 
   it("reports recent-sync pass when log has no errors", async () => {
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(join(claudefyDir, "logs"), { recursive: true });
     await writeFile(
       join(claudefyDir, "config.json"),
@@ -99,7 +100,7 @@ describe("DoctorCommand", () => {
   });
 
   it("reports recent-sync warn when log has recent errors", async () => {
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(join(claudefyDir, "logs"), { recursive: true });
     await writeFile(
       join(claudefyDir, "config.json"),

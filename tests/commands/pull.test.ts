@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("PullCommand", () => {
   let pushHomeDir: string;
@@ -25,7 +26,7 @@ describe("PullCommand", () => {
 
     // Set up Machine A with content
     const pushClaudeDir = join(pushHomeDir, ".claude");
-    const pushClaudefyDir = join(pushHomeDir, ".claudefy");
+    const pushClaudefyDir = join(pushHomeDir, CLAUDEFY_DIR);
 
     await mkdir(join(pushClaudeDir, "commands"), { recursive: true });
     await writeFile(join(pushClaudeDir, "commands", "test.md"), "# Test Command");
@@ -67,7 +68,7 @@ describe("PullCommand", () => {
 
     // Set up Machine B with minimal config (no content yet)
     const pullClaudeDir = join(pullHomeDir, ".claude");
-    const pullClaudefyDir = join(pullHomeDir, ".claudefy");
+    const pullClaudefyDir = join(pullHomeDir, CLAUDEFY_DIR);
 
     await mkdir(pullClaudeDir, { recursive: true });
     await mkdir(join(pullClaudefyDir, "backups"), { recursive: true });
@@ -179,7 +180,7 @@ describe("PullCommand", () => {
 
   it("detects override marker and creates backup", async () => {
     // Simulate override from Machine A
-    const pushClaudefyDir = join(pushHomeDir, ".claudefy");
+    const pushClaudefyDir = join(pushHomeDir, CLAUDEFY_DIR);
     const gitAdapter = new GitAdapter(pushClaudefyDir);
     await gitAdapter.initStore(remoteDir);
     await gitAdapter.ensureMachineBranch("machine-a");
@@ -200,10 +201,47 @@ describe("PullCommand", () => {
     expect(existsSync(result.backupPath!)).toBe(true);
   });
 
+  it("only commits .override removal when acknowledging an override", async () => {
+    const initialPull = new PullCommand(pullHomeDir);
+    await initialPull.execute({ quiet: true, skipEncryption: true });
+
+    const pullStorePath = join(pullHomeDir, CLAUDEFY_DIR, "store");
+    const pullStoreConfigDir = join(pullStorePath, "config");
+    await writeFile(join(pullStoreConfigDir, "local-only.txt"), "leave me unstaged");
+
+    const pushClaudefyDir = join(pushHomeDir, CLAUDEFY_DIR);
+    const gitAdapter = new GitAdapter(pushClaudefyDir);
+    await gitAdapter.initStore(remoteDir);
+    await gitAdapter.ensureMachineBranch("machine-a");
+    await gitAdapter.writeOverrideMarker("machine-a");
+    await gitAdapter.commitAndPush("override: machine-a", "machine-a");
+
+    const pull = new PullCommand(pullHomeDir);
+    const result = await pull.execute({ quiet: true, skipEncryption: true });
+
+    expect(result.overrideDetected).toBe(true);
+
+    const git = simpleGit(pullStorePath);
+    const latestMessage = (await git.raw(["log", "-1", "--pretty=%s"])).trim();
+    const changedFiles = (
+      await git.raw(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+    )
+      .split("\n")
+      .filter(Boolean);
+    const status = await git.status();
+
+    expect(latestMessage).toBe("acknowledge override marker removal");
+    expect(changedFiles).toEqual([".override"]);
+    expect(status.not_added).not.toContain("config/local-only.txt");
+
+    // Verify untracked store files don't leak into ~/.claude after override
+    expect(existsSync(join(pullHomeDir, ".claude", "local-only.txt"))).toBe(false);
+  });
+
   it("handles encrypted files on pull", { timeout: 15_000 }, async () => {
     // Push with encryption from Machine A
     await writeFile(
-      join(pushHomeDir, ".claudefy", "config.json"),
+      join(pushHomeDir, CLAUDEFY_DIR, "config.json"),
       JSON.stringify({
         version: 1,
         backend: { type: "git", url: remoteDir },
@@ -219,7 +257,7 @@ describe("PullCommand", () => {
 
     // Pull with encryption on Machine B
     await writeFile(
-      join(pullHomeDir, ".claudefy", "config.json"),
+      join(pullHomeDir, CLAUDEFY_DIR, "config.json"),
       JSON.stringify({
         version: 1,
         backend: { type: "git", url: remoteDir },
@@ -245,7 +283,7 @@ describe("PullCommand", () => {
     await pull.execute({ quiet: true, skipEncryption: true });
 
     // Check that the store is clean (no new commits from pull)
-    const pullClaudefyDir = join(pullHomeDir, ".claudefy");
+    const pullClaudefyDir = join(pullHomeDir, CLAUDEFY_DIR);
     const gitAdapter = new GitAdapter(pullClaudefyDir);
     await gitAdapter.initStore(remoteDir);
     const isClean = await gitAdapter.isClean();
@@ -256,12 +294,12 @@ describe("PullCommand", () => {
     const pull = new PullCommand(pullHomeDir);
     await pull.execute({ quiet: true, skipEncryption: true });
 
-    const tmpDir = join(pullHomeDir, ".claudefy", ".pull-tmp");
+    const tmpDir = join(pullHomeDir, CLAUDEFY_DIR, ".pull-tmp");
     expect(existsSync(tmpDir)).toBe(false);
   });
 
   it("cleans up stale .pull-tmp from previous crash on startup", async () => {
-    const staleTmpDir = join(pullHomeDir, ".claudefy", ".pull-tmp");
+    const staleTmpDir = join(pullHomeDir, CLAUDEFY_DIR, ".pull-tmp");
     await mkdir(staleTmpDir, { recursive: true });
     await writeFile(join(staleTmpDir, "leaked-secret.json"), "plaintext secret");
 
@@ -322,7 +360,7 @@ describe("PullCommand", () => {
     await pull.execute({ quiet: true, skipEncryption: true });
 
     // Read store config after pull
-    const pullClaudefyDir = join(pullHomeDir, ".claudefy");
+    const pullClaudefyDir = join(pullHomeDir, CLAUDEFY_DIR);
     const storePath = join(pullClaudefyDir, "store");
     const storeConfigDir = join(storePath, "config");
 
@@ -344,7 +382,7 @@ describe("PullCommand", () => {
     await push.execute({ quiet: true, skipEncryption: true, skipSecretScan: true });
 
     // Inject a symlink into the store's config directory
-    const storePath = join(pushHomeDir, ".claudefy", "store");
+    const storePath = join(pushHomeDir, CLAUDEFY_DIR, "store");
     const storeConfigDir = join(storePath, "config");
     const symlinkTarget = join(pushHomeDir, ".claude", "settings.json");
     const symlinkPath = join(storeConfigDir, "evil-symlink.txt");
@@ -360,6 +398,34 @@ describe("PullCommand", () => {
     expect(existsSync(join(pullClaudeDir, "evil-symlink.txt"))).toBe(false);
   });
 
+  it("does not follow nested symlinks while copying store content", async () => {
+    const storePath = join(pushHomeDir, CLAUDEFY_DIR, "store");
+    const storeConfigDir = join(storePath, "config");
+    const nestedDir = join(storeConfigDir, "commands", "nested");
+    const leakedFilePath = join(pushHomeDir, "outside-secret.txt");
+    const nestedSymlinkPath = join(nestedDir, "secret.txt");
+
+    await mkdir(nestedDir, { recursive: true });
+    await writeFile(leakedFilePath, "super-secret");
+    await symlink(leakedFilePath, nestedSymlinkPath);
+
+    const git = simpleGit(storePath);
+    await git.add(["config/commands/nested/secret.txt"]);
+    await git.commit("add nested symlink test artifact");
+    const branch = (await git.branch()).current;
+    await git.push("origin", branch);
+    await git.checkout("main");
+    await git.merge([branch]);
+    await git.push("origin", "main");
+    await git.checkout(branch);
+
+    const pull = new PullCommand(pullHomeDir);
+    await pull.execute({ quiet: true, skipEncryption: true });
+
+    const pullClaudeDir = join(pullHomeDir, ".claude");
+    expect(existsSync(join(pullClaudeDir, "commands", "nested", "secret.txt"))).toBe(false);
+  });
+
   it("skips path traversal entries in config store during pull", async () => {
     // First push to populate store and remote
     const push = new PushCommand(pushHomeDir);
@@ -367,7 +433,7 @@ describe("PullCommand", () => {
 
     // Inject a normal file and a symlink into the push machine's store,
     // then commit+push so the pull machine receives them
-    const storePath = join(pushHomeDir, ".claudefy", "store");
+    const storePath = join(pushHomeDir, CLAUDEFY_DIR, "store");
     const storeConfigDir = join(storePath, "config");
     await writeFile(join(storeConfigDir, "normal.txt"), "safe content");
     // Create a symlink inside the store config dir

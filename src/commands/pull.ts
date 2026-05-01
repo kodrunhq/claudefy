@@ -1,7 +1,6 @@
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { existsSync } from "node:fs";
-import { simpleGit } from "simple-git";
 import { ConfigManager } from "../config/config-manager.js";
 import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PathMapper } from "../path-mapper/path-mapper.js";
@@ -10,7 +9,7 @@ import { Encryptor } from "../encryptor/encryptor.js";
 import { Merger } from "../merger/merger.js";
 import { BackupManager } from "../backup-manager/backup-manager.js";
 import { output } from "../output.js";
-import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR } from "../config/defaults.js";
+import { CLAUDEFY_DIR, STORE_CONFIG_DIR, STORE_UNKNOWN_DIR } from "../config/defaults.js";
 import { Lockfile } from "../lockfile/lockfile.js";
 import { ClaudeJsonSync } from "../claude-json-sync/claude-json-sync.js";
 import { Logger } from "../logger.js";
@@ -53,7 +52,7 @@ export class PullCommand {
   }
 
   async execute(options: PullOptions): Promise<PullResult> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     const log = options.logger;
 
     await log?.log("info", "pull", "Pull started");
@@ -136,18 +135,15 @@ export class PullCommand {
       }
 
       // Reset machine branch to main so we apply the override content
-      const git = simpleGit(storePath);
-      await git.reset(["--hard", "main"]);
+      await gitAdapter.resetHard("main");
+
+      // Clean untracked files so they don't leak into ~/.claude during the copy phase
+      await gitAdapter.cleanUntracked();
 
       // Remove override marker and commit the acknowledgement locally.
       // The commit will be pushed on the next normal push.
       await gitAdapter.removeOverrideMarker();
-      const gitCommit = simpleGit(storePath);
-      await gitCommit.add(["."]);
-      const status = await gitCommit.status();
-      if (!status.isClean()) {
-        await gitCommit.commit("acknowledge override marker removal");
-      }
+      await gitAdapter.stageAndCommitIfDirty("acknowledge override marker removal", [".override"]);
     }
 
     // 3. Create temp working directory
@@ -155,11 +151,10 @@ export class PullCommand {
     if (existsSync(tmpDir)) await rm(tmpDir, { recursive: true, force: true });
     await mkdir(tmpDir, { recursive: true });
 
-    let interruptedSignal: string | null = null;
+    let interruptedSignal: NodeJS.Signals | null = null;
 
-    const onSignal = (signal: string) => {
+    const onSignal = (signal: NodeJS.Signals) => {
       interruptedSignal = signal;
-      process.once(signal, () => process.exit(128 + (signal === "SIGINT" ? 2 : 15)));
     };
 
     const sigintHandler = () => onSignal("SIGINT");
@@ -175,12 +170,17 @@ export class PullCommand {
         const storeUnknownDir = join(storePath, STORE_UNKNOWN_DIR);
         const tmpConfigDir = join(tmpDir, "config");
         const tmpUnknownDir = join(tmpDir, "unknown");
-        if (existsSync(storeConfigDir)) await cp(storeConfigDir, tmpConfigDir, { recursive: true });
+        if (existsSync(storeConfigDir)) {
+          await cp(storeConfigDir, tmpConfigDir, { recursive: true, verbatimSymlinks: true });
+        }
         if (existsSync(storeUnknownDir))
-          await cp(storeUnknownDir, tmpUnknownDir, { recursive: true });
+          await cp(storeUnknownDir, tmpUnknownDir, {
+            recursive: true,
+            verbatimSymlinks: true,
+          });
 
         // Security: remove any symlinks nested inside subdirectories
-        // (top-level symlinks are checked later, but cp() follows nested ones)
+        // (top-level symlinks are checked later; nested ones are preserved during copy, then removed here)
         await this.removeNestedSymlinks(tmpConfigDir);
         await this.removeNestedSymlinks(tmpUnknownDir);
 
@@ -363,7 +363,7 @@ export class PullCommand {
               continue;
             }
 
-            await cp(src, dest, { recursive: true, force: true });
+            await cp(src, dest, { recursive: true, force: true, verbatimSymlinks: true });
             result.filesUpdated++;
           }
         }
@@ -392,7 +392,7 @@ export class PullCommand {
               continue;
             }
 
-            await cp(src, dest, { recursive: true, force: true });
+            await cp(src, dest, { recursive: true, force: true, verbatimSymlinks: true });
             result.filesUpdated++;
           }
         }
@@ -457,15 +457,15 @@ export class PullCommand {
     const override = await gitAdapter.checkOverrideMarker();
     if (override) return override;
 
-    // If not found, check on main branch by temporarily switching
+    // If not found, check on main without switching branches
     const currentBranch = await gitAdapter.getCurrentBranch();
     if (currentBranch === "main") return null;
 
-    const storePath = gitAdapter.getStorePath();
     try {
-      const git = simpleGit(storePath);
-      // Use git show to read .override from main without switching branches
-      const content = await git.show(["main:.override"]);
+      const content = await gitAdapter.readFileAtRef("main", ".override");
+      if (content === null) {
+        return null;
+      }
       const marker: unknown = JSON.parse(content);
       if (
         marker !== null &&
@@ -535,7 +535,7 @@ export class PullCommand {
     try {
       // Copy store config, stripping .age extensions
       if (existsSync(storeConfigDir)) {
-        await cp(storeConfigDir, tmpStore, { recursive: true });
+        await cp(storeConfigDir, tmpStore, { recursive: true, verbatimSymlinks: true });
         await this.stripAgeExtensionsForDryRun(tmpStore);
       }
       // Also include unknown items — copy at root level to match real pull behavior
@@ -544,7 +544,7 @@ export class PullCommand {
         const unknownEntries = await readdir(storeUnknownDir, { withFileTypes: true });
         for (const entry of unknownEntries) {
           const src = join(storeUnknownDir, entry.name);
-          await cp(src, join(tmpStore, entry.name), { recursive: true });
+          await cp(src, join(tmpStore, entry.name), { recursive: true, verbatimSymlinks: true });
         }
       }
       // Copy allowlisted local files
@@ -558,7 +558,8 @@ export class PullCommand {
           : classification.allowlist;
         for (const item of filteredAllowlist) {
           const src = join(this.claudeDir, item.name);
-          if (existsSync(src)) await cp(src, join(tmpLocal, item.name), { recursive: true });
+          if (existsSync(src))
+            await cp(src, join(tmpLocal, item.name), { recursive: true, verbatimSymlinks: true });
         }
       }
       const diff = await computeDiff(tmpStore, tmpLocal);

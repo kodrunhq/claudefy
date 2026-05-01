@@ -4,6 +4,7 @@ import { BackupManager } from "../../src/backup-manager/backup-manager.js";
 import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("RestoreCommand", () => {
   let homeDir: string;
@@ -13,7 +14,7 @@ describe("RestoreCommand", () => {
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-restore-test-"));
     claudeDir = join(homeDir, ".claude");
-    claudefyDir = join(homeDir, ".claudefy");
+    claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(claudeDir, { recursive: true });
     await mkdir(join(claudefyDir, "backups"), { recursive: true });
   });

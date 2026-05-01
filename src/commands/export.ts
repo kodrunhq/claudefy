@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { homedir } from "node:os";
+import { mkdir } from "node:fs/promises";
 import { SyncFilter } from "../sync-filter/sync-filter.js";
 import { ConfigManager } from "../config/config-manager.js";
 import { output } from "../output.js";
@@ -43,10 +45,16 @@ export class ExportCommand {
       return;
     }
 
+    let outputPath = options.output;
+    if (outputPath.startsWith("~/")) {
+      outputPath = join(homedir(), outputPath.slice(2));
+    }
+    await mkdir(dirname(outputPath), { recursive: true });
+
     try {
       await execFileAsync("tar", [
         "-czf",
-        options.output,
+        outputPath,
         "-C",
         this.claudeDir,
         "--",
@@ -57,7 +65,7 @@ export class ExportCommand {
     }
 
     if (!options.quiet) {
-      output.success(`Exported ${itemsToExport.length} items to ${options.output}`);
+      output.success(`Exported ${itemsToExport.length} items to ${outputPath}`);
     }
   }
 }

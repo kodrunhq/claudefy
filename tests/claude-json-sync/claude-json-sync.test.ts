@@ -344,6 +344,26 @@ describe("ClaudeJsonSync", () => {
   });
 
   describe("path canonicalization", () => {
+    it("does not rewrite paths that merely share a prefix with homeDir", async () => {
+      const claudeJson = {
+        mcpServers: {
+          local: { command: "/home/user2/.local/bin/mcp-server" },
+        },
+      };
+      await writeFile(join(homeDir, ".claude.json"), JSON.stringify(claudeJson));
+
+      const sync = new ClaudeJsonSync();
+      const result = sync.extract({
+        claudeJsonPath: join(homeDir, ".claude.json"),
+        storePath: join(storeDir, "claude-json-sync.json"),
+        homeDir: "/home/user",
+        syncMcpServers: true,
+      });
+
+      const servers = result.mcpServers as Record<string, { command: string }>;
+      expect(servers.local.command).toBe("/home/user2/.local/bin/mcp-server");
+    });
+
     it("canonicalizes home paths inside args arrays", async () => {
       const claudeJson = {
         mcpServers: {
@@ -371,6 +391,44 @@ describe("ClaudeJsonSync", () => {
       expect(servers.local.args[0]).toBe("@@HOME@@/.local/bin/wrapper.js");
       expect(servers.local.args[1]).toBe("--config");
       expect(servers.local.args[2]).toBe("@@HOME@@/.config/mcp.json");
+    });
+
+    it("handles Windows-style backslash separators", async () => {
+      const { vi } = await import("vitest");
+      const pathModule = await import("node:path");
+      vi.doMock("node:path", () => ({
+        ...pathModule,
+        sep: "\\",
+      }));
+      vi.resetModules();
+
+      const { ClaudeJsonSync: WindowsClaudeJsonSync } =
+        await import("../../src/claude-json-sync/claude-json-sync.js");
+
+      const claudeJson = {
+        mcpServers: {
+          local: {
+            command: "C:\\Users\\alice\\bin\\tool.exe",
+            args: ["C:\\Users\\alice", "C:\\Users\\alic\\bin\\tool.exe"],
+          },
+        },
+      };
+      await writeFile(join(homeDir, ".claude.json"), JSON.stringify(claudeJson));
+
+      const sync = new WindowsClaudeJsonSync();
+      const result = sync.extract({
+        claudeJsonPath: join(homeDir, ".claude.json"),
+        storePath: join(storeDir, "claude-json-sync.json"),
+        homeDir: "C:\\Users\\alice",
+        syncMcpServers: true,
+      });
+
+      const servers = result.mcpServers as Record<string, { command: string; args: string[] }>;
+      expect(servers.local.command).toBe("@@HOME@@\\bin\\tool.exe");
+      expect(servers.local.args[0]).toBe("@@HOME@@");
+      expect(servers.local.args[1]).toBe("C:\\Users\\alic\\bin\\tool.exe");
+
+      vi.doUnmock("node:path");
     });
   });
 });

@@ -3,6 +3,7 @@ import { ConfigManager } from "../../src/config/config-manager.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("ConfigManager", () => {
   let tempDir: string;
@@ -90,7 +91,7 @@ describe("ConfigManager", () => {
   it("throws when loading config with missing backend", async () => {
     await configManager.initialize("git@github.com:user/store.git");
     // Overwrite config with invalid content missing backend
-    const configDir = join(tempDir, ".claudefy");
+    const configDir = join(tempDir, CLAUDEFY_DIR);
     await writeFile(
       join(configDir, "config.json"),
       JSON.stringify({ version: 1, machineId: "test-id" }, null, 2),
@@ -100,7 +101,7 @@ describe("ConfigManager", () => {
 
   it("throws when loading config with missing machineId", async () => {
     await configManager.initialize("git@github.com:user/store.git");
-    const configDir = join(tempDir, ".claudefy");
+    const configDir = join(tempDir, CLAUDEFY_DIR);
     await writeFile(
       join(configDir, "config.json"),
       JSON.stringify(

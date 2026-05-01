@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("PushCommand", () => {
   let homeDir: string;
@@ -15,7 +16,7 @@ describe("PushCommand", () => {
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-push-test-"));
     claudeDir = join(homeDir, ".claude");
-    claudefyDir = join(homeDir, ".claudefy");
+    claudefyDir = join(homeDir, CLAUDEFY_DIR);
 
     // Create bare remote
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-push-remote-"));
@@ -215,7 +216,7 @@ describe("PushCommand", () => {
     await push.execute({ quiet: true, skipEncryption: true });
 
     // Get commit count after first push
-    const storePath = join(homeDir, ".claudefy", "store");
+    const storePath = join(homeDir, CLAUDEFY_DIR, "store");
     const git = simpleGit(storePath);
     const log1 = await git.log();
     const count1 = log1.total;
@@ -383,7 +384,7 @@ describe("PushCommand", () => {
 
   it("dry-run does not modify store when dryRun: true", async () => {
     const push = new PushCommand(homeDir);
-    const storeConfigDir = join(homeDir, ".claudefy", "store", "config");
+    const storeConfigDir = join(homeDir, CLAUDEFY_DIR, "store", "config");
 
     await push.execute({ quiet: true, skipEncryption: true, dryRun: true });
 
@@ -396,7 +397,7 @@ describe("PushCommand", () => {
     const push = new PushCommand(homeDir);
     await push.execute({ quiet: true, skipEncryption: true, only: "settings.json" });
 
-    const storeConfigDir = join(homeDir, ".claudefy", "store", "config");
+    const storeConfigDir = join(homeDir, CLAUDEFY_DIR, "store", "config");
     // settings.json should exist in store
     expect(existsSync(join(storeConfigDir, "settings.json"))).toBe(true);
     // other items should not be in store
@@ -407,7 +408,7 @@ describe("PushCommand", () => {
     const push = new PushCommand(homeDir);
     await push.execute({ quiet: true, skipEncryption: true });
 
-    const storePath = join(homeDir, ".claudefy", "store");
+    const storePath = join(homeDir, CLAUDEFY_DIR, "store");
     const settingsPath = join(storePath, "config", "settings.json");
     const { stat: fsStat } = await import("node:fs/promises");
     const stat1 = await fsStat(settingsPath);
