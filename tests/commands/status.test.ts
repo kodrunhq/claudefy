@@ -3,6 +3,7 @@ import { StatusCommand } from "../../src/commands/status.js";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("StatusCommand", () => {
   let homeDir: string;
@@ -23,7 +24,7 @@ describe("StatusCommand", () => {
 
   it("returns status when initialized", async () => {
     const claudeDir = join(homeDir, ".claude");
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
 
     // Create ~/.claude with test content
     await mkdir(join(claudeDir, "commands"), { recursive: true });

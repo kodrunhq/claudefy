@@ -4,6 +4,7 @@ import { GitAdapter } from "../git-adapter/git-adapter.js";
 import { PushCommand } from "./push.js";
 import { output } from "../output.js";
 import { withLock } from "../lockfile/lockfile.js";
+import { CLAUDEFY_DIR } from "../config/defaults.js";
 
 export interface OverrideOptions {
   quiet: boolean;
@@ -22,7 +23,7 @@ export class OverrideCommand {
   }
 
   async execute(options: OverrideOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     await withLock("override", !!options.quiet, claudefyDir, async () => {
       if (!options.confirm) {
         throw new Error(
@@ -37,7 +38,7 @@ export class OverrideCommand {
       }
 
       // 1. Initialize git adapter
-      const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
+      const gitAdapter = new GitAdapter(join(this.homeDir, CLAUDEFY_DIR));
       await gitAdapter.initStore(config.backend.url);
       await gitAdapter.ensureMachineBranch(config.machineId);
       try {

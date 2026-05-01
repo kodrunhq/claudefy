@@ -108,7 +108,11 @@ export class HookManager {
     if (!Array.isArray(hookEntry.hooks)) return false;
     return hookEntry.hooks.some((h: HookEntry) => {
       const command = typeof h.command === "string" ? h.command.trim() : "";
-      return command.includes("claudefy pull") || command.includes("claudefy push");
+      return (
+        command.startsWith("claudefy pull") ||
+        command.startsWith("claudefy push") ||
+        command.startsWith("nohup claudefy push")
+      );
     });
   }
 

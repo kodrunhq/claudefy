@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("JoinCommand", () => {
   let initHomeDir: string;
@@ -58,7 +59,7 @@ describe("JoinCommand", () => {
     });
 
     // Config should exist
-    expect(existsSync(join(joinHomeDir, ".claudefy", "config.json"))).toBe(true);
+    expect(existsSync(join(joinHomeDir, CLAUDEFY_DIR, "config.json"))).toBe(true);
 
     // Machine should be registered in manifest
     const verifyDir = await mkdtemp(join(tmpdir(), "claudefy-join-verify-"));

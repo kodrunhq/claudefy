@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("OverrideCommand", () => {
   let homeDir: string;
@@ -17,7 +18,7 @@ describe("OverrideCommand", () => {
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-override-test-"));
     claudeDir = join(homeDir, ".claude");
-    claudefyDir = join(homeDir, ".claudefy");
+    claudefyDir = join(homeDir, CLAUDEFY_DIR);
 
     // Create bare remote
     remoteDir = await mkdtemp(join(tmpdir(), "claudefy-override-remote-"));
@@ -123,7 +124,7 @@ describe("OverrideCommand", () => {
     // Set up Machine B
     const homeDirB = await mkdtemp(join(tmpdir(), "claudefy-override-machb-"));
     const claudeDirB = join(homeDirB, ".claude");
-    const claudefyDirB = join(homeDirB, ".claudefy");
+    const claudefyDirB = join(homeDirB, CLAUDEFY_DIR);
 
     await mkdir(claudeDirB, { recursive: true });
     await writeFile(

@@ -139,7 +139,7 @@ export class GitAdapter {
       const machineBranch = `machines/${machineId}`;
       try {
         await this.git!.checkout("main");
-        await this.git!.pull("origin", "main").catch(() => {});
+        await this.git!.pull("origin", "main").catch(() => {}); // Best-effort — may fail on fresh repos with no remote history
         await this.git!.merge([machineBranch]);
         await this.git!.push(["-u", "origin", "main"]);
         result.mergedToMain = true;
@@ -147,7 +147,7 @@ export class GitAdapter {
         result.mergedToMain = false;
         result.mergeError = (err as Error).message;
         // Abort any in-progress merge
-        await this.git!.merge(["--abort"]).catch(() => {});
+        await this.git!.merge(["--abort"]).catch(() => {}); // Best-effort — no merge in progress to abort is fine
       } finally {
         await this.git!.checkout(machineBranch);
       }
@@ -158,9 +158,41 @@ export class GitAdapter {
 
   async isClean(): Promise<boolean> {
     this.ensureInitialized();
-    await this.git!.add(".");
     const status = await this.git!.status();
     return status.isClean();
+  }
+
+  async readFileAtRef(ref: string, filePath: string): Promise<string | null> {
+    this.ensureInitialized();
+    try {
+      return await this.git!.show([`${ref}:${filePath}`]);
+    } catch (error) {
+      if (this.isMissingGitShowTarget(error)) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async stageAndCommitIfDirty(message: string, paths?: string[]): Promise<void> {
+    this.ensureInitialized();
+    const pathsToStage = paths && paths.length > 0 ? paths : ".";
+    await this.git!.add(pathsToStage);
+    const status = await this.git!.status();
+    if (status.staged.length === 0) {
+      return;
+    }
+    await this.git!.commit(message);
+  }
+
+  async resetHard(ref: string): Promise<void> {
+    this.ensureInitialized();
+    await this.git!.reset(["--hard", ref]);
+  }
+
+  async cleanUntracked(): Promise<void> {
+    this.ensureInitialized();
+    await this.git!.clean("f", ["-d"]);
   }
 
   async pull(): Promise<void> {
@@ -184,7 +216,7 @@ export class GitAdapter {
       await this.git!.merge(["main"]);
     } catch (err) {
       // Merge conflict — abort, machine branch state wins
-      await this.git!.merge(["--abort"]).catch(() => {});
+      await this.git!.merge(["--abort"]).catch(() => {}); // Best-effort — no merge in progress to abort is fine
       // Re-throw so callers can log the merge error
       throw err;
     }
@@ -263,7 +295,7 @@ export class GitAdapter {
     if (!hasCommits) {
       // Empty cloned repo — create initial commit on main branch
       // First, checkout -b main (we may be on master from clone default)
-      await this.git.checkout(["-b", "main"]).catch(() => {});
+      await this.git.checkout(["-b", "main"]).catch(() => {}); // Best-effort — branch may already exist
       await writeFile(join(this.storePath, ".gitkeep"), "");
       await this.git.add(".");
       await this.git.commit("initial claudefy store");
@@ -333,5 +365,12 @@ export class GitAdapter {
       this.ghAuthCache = false;
     }
     return this.ghAuthCache;
+  }
+
+  private isMissingGitShowTarget(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return /does not exist in|exists on disk, but not in|bad object|invalid object name|unknown revision or path not in the working tree/i.test(
+      message,
+    );
   }
 }

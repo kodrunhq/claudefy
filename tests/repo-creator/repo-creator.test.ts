@@ -4,32 +4,40 @@ import { RepoCreator } from "../../src/repo-creator/repo-creator.js";
 describe("RepoCreator", () => {
   it("detects github when gh is available", async () => {
     const creator = new RepoCreator();
-    vi.spyOn(creator as any, "isAvailable").mockImplementation((cmd: string) =>
-      Promise.resolve(cmd === "gh"),
-    );
+    vi.spyOn(
+      creator as unknown as { isAvailable: (cmd: string) => Promise<boolean> },
+      "isAvailable",
+    ).mockImplementation((cmd: string) => Promise.resolve(cmd === "gh"));
     const provider = await creator.detect();
     expect(provider).toBe("github");
   });
 
   it("detects gitlab when only glab is available", async () => {
     const creator = new RepoCreator();
-    vi.spyOn(creator as any, "isAvailable").mockImplementation((cmd: string) =>
-      Promise.resolve(cmd === "glab"),
-    );
+    vi.spyOn(
+      creator as unknown as { isAvailable: (cmd: string) => Promise<boolean> },
+      "isAvailable",
+    ).mockImplementation((cmd: string) => Promise.resolve(cmd === "glab"));
     const provider = await creator.detect();
     expect(provider).toBe("gitlab");
   });
 
   it("returns null when no CLI is available", async () => {
     const creator = new RepoCreator();
-    vi.spyOn(creator as any, "isAvailable").mockResolvedValue(false);
+    vi.spyOn(
+      creator as unknown as { isAvailable: (cmd: string) => Promise<boolean> },
+      "isAvailable",
+    ).mockResolvedValue(false);
     const provider = await creator.detect();
     expect(provider).toBeNull();
   });
 
   it("throws when no CLI is available", async () => {
     const creator = new RepoCreator();
-    vi.spyOn(creator as any, "isAvailable").mockResolvedValue(false);
+    vi.spyOn(
+      creator as unknown as { isAvailable: (cmd: string) => Promise<boolean> },
+      "isAvailable",
+    ).mockResolvedValue(false);
     await expect(creator.create("test-repo")).rejects.toThrow("No supported CLI found");
   });
 });

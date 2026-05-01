@@ -6,6 +6,7 @@ import { HookManager } from "../hook-manager/hook-manager.js";
 import { output } from "../output.js";
 import { promptPassphraseSetup } from "../encryptor/passphrase.js";
 import { withLock } from "../lockfile/lockfile.js";
+import { CLAUDEFY_DIR } from "../config/defaults.js";
 
 export interface InitOptions {
   backend?: string;
@@ -25,7 +26,7 @@ export class InitCommand {
   }
 
   async execute(options: InitOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     await withLock(
       "init",
       !!options.quiet,
@@ -66,6 +67,8 @@ export class InitCommand {
           } else {
             skipEncryption = true;
           }
+        } else if (!passphrase && !skipEncryption && !process.stdin.isTTY) {
+          skipEncryption = true;
         }
 
         // 1. Initialize config
@@ -81,7 +84,7 @@ export class InitCommand {
         }
 
         // 2. Initialize git store
-        const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
+        const gitAdapter = new GitAdapter(join(this.homeDir, CLAUDEFY_DIR));
         await gitAdapter.initStore(backend);
         await gitAdapter.ensureMachineBranch(config.machineId);
 

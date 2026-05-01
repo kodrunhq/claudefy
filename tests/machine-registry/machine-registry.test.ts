@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { MachineRegistry } from "../../src/machine-registry/machine-registry.js";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -78,5 +78,35 @@ describe("MachineRegistry", () => {
 
     const machines = await registry.list();
     expect(machines).toHaveLength(2);
+  });
+
+  it("falls back to empty manifest on malformed JSON object {}", async () => {
+    await writeFile(manifestPath, "{}", "utf-8");
+    const registry = new MachineRegistry(manifestPath);
+    const machines = await registry.list();
+    expect(machines).toEqual([]);
+  });
+
+  it("falls back to empty manifest on JSON array []", async () => {
+    await writeFile(manifestPath, "[]", "utf-8");
+    const registry = new MachineRegistry(manifestPath);
+    const machines = await registry.list();
+    expect(machines).toEqual([]);
+  });
+
+  it("falls back to empty manifest when machines field is missing", async () => {
+    await writeFile(manifestPath, JSON.stringify({ version: 1 }), "utf-8");
+    const registry = new MachineRegistry(manifestPath);
+    const machines = await registry.list();
+    expect(machines).toEqual([]);
+  });
+
+  it("recovers from malformed manifest and allows registration", async () => {
+    await writeFile(manifestPath, "{}", "utf-8");
+    const registry = new MachineRegistry(manifestPath);
+    await registry.register("nuc-i7-abc123", "nuc-i7", "linux");
+    const machines = await registry.list();
+    expect(machines).toHaveLength(1);
+    expect(machines[0].machineId).toBe("nuc-i7-abc123");
   });
 });

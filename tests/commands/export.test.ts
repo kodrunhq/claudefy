@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("ExportCommand", () => {
   let homeDir: string;
@@ -18,7 +19,7 @@ describe("ExportCommand", () => {
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-export-test-"));
     claudeDir = join(homeDir, ".claude");
-    claudefyDir = join(homeDir, ".claudefy");
+    claudefyDir = join(homeDir, CLAUDEFY_DIR);
 
     // Create ~/.claude with content
     await mkdir(join(claudeDir, "commands"), { recursive: true });
@@ -123,5 +124,32 @@ describe("ExportCommand", () => {
     expect(content).toBe("my rules");
 
     await rm(extractDir, { recursive: true, force: true });
+  });
+
+  it("creates parent directories for output path", async () => {
+    const nestedOutput = join(homeDir, "nested", "deep", "export.tar.gz");
+    const cmd = new ExportCommand(homeDir);
+    await cmd.execute({ output: nestedOutput, quiet: true });
+
+    expect(existsSync(nestedOutput)).toBe(true);
+  });
+
+  it("expands ~/ in output path", async () => {
+    const originalHome = process.env.HOME;
+    process.env.HOME = homeDir;
+
+    try {
+      const cmd = new ExportCommand(homeDir);
+      await cmd.execute({ output: "~/export-test.tar.gz", quiet: true });
+
+      const expandedPath = join(homeDir, "export-test.tar.gz");
+      expect(existsSync(expandedPath)).toBe(true);
+    } finally {
+      if (originalHome !== undefined) {
+        process.env.HOME = originalHome;
+      } else {
+        delete process.env.HOME;
+      }
+    }
   });
 });

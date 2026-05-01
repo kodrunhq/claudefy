@@ -4,6 +4,7 @@ import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("BackupManager", () => {
   let tempDir: string;
@@ -13,7 +14,7 @@ describe("BackupManager", () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "claudefy-backup-test-"));
     claudeDir = join(tempDir, ".claude");
-    claudefyDir = join(tempDir, ".claudefy");
+    claudefyDir = join(tempDir, CLAUDEFY_DIR);
     await mkdir(claudeDir);
     await mkdir(claudefyDir);
     await mkdir(join(claudefyDir, "backups"));

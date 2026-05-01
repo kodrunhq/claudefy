@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
-import { resolve, relative, isAbsolute } from "node:path";
+import { resolve, relative, isAbsolute, sep } from "node:path";
 import { output } from "../output.js";
 
 export interface ClaudeJsonSyncOptions {
@@ -122,7 +122,9 @@ export class ClaudeJsonSync {
 
   private canonicalizePaths(obj: unknown, homeDir: string): unknown {
     if (typeof obj === "string") {
-      return obj.startsWith(homeDir) ? "@@HOME@@" + obj.slice(homeDir.length) : obj;
+      return obj === homeDir || obj.startsWith(homeDir + sep) || obj.startsWith(homeDir + "/")
+        ? "@@HOME@@" + obj.slice(homeDir.length)
+        : obj;
     }
     if (Array.isArray(obj)) {
       return obj.map((item) => this.canonicalizePaths(item, homeDir));

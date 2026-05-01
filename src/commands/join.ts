@@ -10,6 +10,7 @@ import { output } from "../output.js";
 import { promptExistingPassphrase } from "../encryptor/passphrase.js";
 import { withLock } from "../lockfile/lockfile.js";
 import {
+  CLAUDEFY_DIR,
   STORE_CONFIG_DIR,
   STORE_UNKNOWN_DIR,
   STORE_MANIFEST_FILE,
@@ -32,7 +33,7 @@ export class JoinCommand {
   }
 
   async execute(options: JoinOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     await withLock(
       "join",
       !!options.quiet,
@@ -48,7 +49,7 @@ export class JoinCommand {
         const config = await configManager.initialize(options.backend);
 
         // 2. Initialize git store and check for existing machine with same hostname
-        const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
+        const gitAdapter = new GitAdapter(join(this.homeDir, CLAUDEFY_DIR));
         await gitAdapter.initStore(options.backend);
 
         // Reuse machine ID if this hostname was previously registered (e.g. after

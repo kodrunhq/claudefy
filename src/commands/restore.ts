@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 import { BackupManager } from "../backup-manager/backup-manager.js";
 import { output } from "../output.js";
 import { withLock } from "../lockfile/lockfile.js";
+import { CLAUDEFY_DIR } from "../config/defaults.js";
 
 export interface RestoreOptions {
   quiet: boolean;
@@ -18,7 +19,7 @@ export class RestoreCommand {
   constructor(homeDir: string) {
     this.homeDir = homeDir;
     this.claudeDir = join(homeDir, ".claude");
-    this.backupManager = new BackupManager(join(homeDir, ".claudefy"));
+    this.backupManager = new BackupManager(join(homeDir, CLAUDEFY_DIR));
   }
 
   async listAvailableBackups(): Promise<string[]> {
@@ -49,7 +50,7 @@ export class RestoreCommand {
   }
 
   async executeInteractive(options: RestoreOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     await withLock("restore", !!options.quiet, claudefyDir, async () => {
       const backups = await this.listAvailableBackups();
       if (backups.length === 0) {

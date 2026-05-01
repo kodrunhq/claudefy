@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("InitCommand", () => {
   let homeDir: string;
@@ -35,10 +36,10 @@ describe("InitCommand", () => {
     await cmd.execute({ backend: remoteDir, quiet: true, skipEncryption: true });
 
     // Check .claudefy was created
-    expect(existsSync(join(homeDir, ".claudefy", "config.json"))).toBe(true);
+    expect(existsSync(join(homeDir, CLAUDEFY_DIR, "config.json"))).toBe(true);
 
     // Check store has content
-    const storePath = join(homeDir, ".claudefy", "store", "config");
+    const storePath = join(homeDir, CLAUDEFY_DIR, "store", "config");
     expect(existsSync(storePath)).toBe(true);
   });
 
@@ -63,5 +64,21 @@ describe("InitCommand", () => {
     const settings = JSON.parse(await readFile(join(claudeDir, "settings.json"), "utf-8"));
     expect(settings.hooks).toBeDefined();
     expect(settings.hooks.SessionStart).toBeDefined();
+  });
+
+  it("disables encryption in non-TTY without passphrase", async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    Object.defineProperty(process.stdin, "isTTY", { value: false, configurable: true });
+
+    try {
+      const cmd = new InitCommand(homeDir);
+      await cmd.execute({ backend: remoteDir, quiet: true });
+
+      const configPath = join(homeDir, CLAUDEFY_DIR, "config.json");
+      const config = JSON.parse(await readFile(configPath, "utf-8"));
+      expect(config.encryption.enabled).toBe(false);
+    } finally {
+      Object.defineProperty(process.stdin, "isTTY", { value: originalIsTTY, configurable: true });
+    }
   });
 });

@@ -7,6 +7,7 @@ import { Encryptor } from "../encryptor/encryptor.js";
 import { prompt, storePassphraseInKeychain } from "../encryptor/passphrase.js";
 import { output } from "../output.js";
 import { withLock } from "../lockfile/lockfile.js";
+import { CLAUDEFY_DIR } from "../config/defaults.js";
 
 export interface RotatePassphraseOptions {
   readonly quiet?: boolean;
@@ -22,7 +23,7 @@ export class RotatePassphraseCommand {
   }
 
   async execute(options: RotatePassphraseOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     await withLock("rotate-passphrase", !!options.quiet, claudefyDir, async () => {
       const configManager = new ConfigManager(this.homeDir);
       const config = await configManager.load();
@@ -89,11 +90,11 @@ export class RotatePassphraseCommand {
       } finally {
         // Cleanup: always remove plaintext files and any .new artifacts from failed Phase 1
         for (const p of plainFiles) {
-          if (existsSync(p)) await rm(p).catch(() => {});
+          if (existsSync(p)) await rm(p).catch(() => {}); // Best-effort cleanup — file may already be gone
         }
         if (phase1Succeeded < ageFiles.length) {
           for (const tmpNew of newAgeFiles) {
-            if (existsSync(tmpNew)) await rm(tmpNew).catch(() => {});
+            if (existsSync(tmpNew)) await rm(tmpNew).catch(() => {}); // Best-effort cleanup — file may already be gone
           }
         }
       }
@@ -102,7 +103,7 @@ export class RotatePassphraseCommand {
       // On POSIX rename() is atomic. On Windows rename() fails if dest exists,
       // so we remove the destination first.
       for (let i = 0; i < ageFiles.length; i++) {
-        if (existsSync(ageFiles[i])) await rm(ageFiles[i]);
+        if (existsSync(ageFiles[i])) await rm(ageFiles[i], { force: true });
         await rename(newAgeFiles[i], ageFiles[i]);
       }
       const rotated = ageFiles.length;

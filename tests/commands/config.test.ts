@@ -3,13 +3,14 @@ import { ConfigCommand } from "../../src/commands/config.js";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("ConfigCommand", () => {
   let homeDir: string;
 
   beforeEach(async () => {
     homeDir = await mkdtemp(join(tmpdir(), "claudefy-config-test-"));
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(claudefyDir, { recursive: true });
     await writeFile(
       join(claudefyDir, "config.json"),

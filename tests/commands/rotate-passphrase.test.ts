@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import simpleGit from "simple-git";
 import { existsSync } from "node:fs";
+import { CLAUDEFY_DIR } from "../../src/config/defaults.js";
 
 describe("RotatePassphraseCommand", () => {
   let homeDir: string;
@@ -30,7 +31,7 @@ describe("RotatePassphraseCommand", () => {
     await writeFile(join(claudeDir, "commands", "test.md"), "# test");
 
     // Set up claudefy config with encryption enabled
-    const claudefyDir = join(homeDir, ".claudefy");
+    const claudefyDir = join(homeDir, CLAUDEFY_DIR);
     await mkdir(join(claudefyDir, "backups"), { recursive: true });
     await writeFile(
       join(claudefyDir, "config.json"),
@@ -62,7 +63,7 @@ describe("RotatePassphraseCommand", () => {
   });
 
   it("re-encrypts files successfully on rotation", { timeout: 120_000 }, async () => {
-    const storePath = join(homeDir, ".claudefy", "store");
+    const storePath = join(homeDir, CLAUDEFY_DIR, "store");
 
     // Check if any .age files exist in store (depends on secret scanner)
     const ageFiles = await findAgeFiles(storePath);
@@ -88,13 +89,13 @@ describe("RotatePassphraseCommand", () => {
 
     // Verify re-encryption: .age files should now be decryptable with new passphrase
     const newEncryptor = new Encryptor(newPass, remoteDir);
-    const ageFilesAfter = await findAgeFiles(join(homeDir, ".claudefy", "store"));
+    const ageFilesAfter = await findAgeFiles(join(homeDir, CLAUDEFY_DIR, "store"));
     expect(ageFilesAfter.length).toBeGreaterThan(0);
 
     for (const ageFile of ageFilesAfter) {
       const outPath = ageFile.replace(/\.age$/, ".decrypted");
       const ad = ageFile
-        .replace(join(homeDir, ".claudefy", "store") + "/", "")
+        .replace(join(homeDir, CLAUDEFY_DIR, "store") + "/", "")
         .replace(/\.age$/, "");
       await expect(newEncryptor.decryptFile(ageFile, outPath, ad)).resolves.not.toThrow();
       await rm(outPath, { force: true });
@@ -102,7 +103,7 @@ describe("RotatePassphraseCommand", () => {
   });
 
   it("throws when wrong old passphrase is provided", { timeout: 120_000 }, async () => {
-    const storePath = join(homeDir, ".claudefy", "store");
+    const storePath = join(homeDir, CLAUDEFY_DIR, "store");
 
     // Inject an encrypted file so rotation has something to work with
     const encryptor = new Encryptor(oldPass, remoteDir);
@@ -124,7 +125,7 @@ describe("RotatePassphraseCommand", () => {
   });
 
   it("leaves no plaintext files after rotation", { timeout: 120_000 }, async () => {
-    const storePath = join(homeDir, ".claudefy", "store");
+    const storePath = join(homeDir, CLAUDEFY_DIR, "store");
 
     // Inject an encrypted file
     const encryptor = new Encryptor(oldPass, remoteDir);

@@ -27,13 +27,13 @@ describe("HookManager", () => {
     expect(settings.hooks.SessionStart).toBeDefined();
     expect(settings.hooks.SessionEnd).toBeDefined();
 
-    const startCmd = settings.hooks.SessionStart.find((h: any) =>
-      h.hooks.some((hk: any) => hk.command.includes("claudefy pull")),
+    const startCmd = settings.hooks.SessionStart.find((h: { hooks: { command: string }[] }) =>
+      h.hooks.some((hk: { command: string }) => hk.command.includes("claudefy pull")),
     );
     expect(startCmd).toBeDefined();
 
-    const endCmd = settings.hooks.SessionEnd.find((h: any) =>
-      h.hooks.some((hk: any) => hk.command.includes("claudefy push")),
+    const endCmd = settings.hooks.SessionEnd.find((h: { hooks: { command: string }[] }) =>
+      h.hooks.some((hk: { command: string }) => hk.command.includes("claudefy push")),
     );
     expect(endCmd).toBeDefined();
   });
@@ -163,5 +163,24 @@ describe("HookManager", () => {
 
     await manager.remove();
     expect(await manager.isInstalled()).toBe(false);
+  });
+
+  it("does not false-positive on commands that merely mention claudefy pull/push", async () => {
+    const withHooks = {
+      hooks: {
+        SessionStart: [{ hooks: [{ type: "command", command: "echo claudefy pull is great" }] }],
+        SessionEnd: [{ hooks: [{ type: "command", command: "echo claudefy push is also great" }] }],
+      },
+    };
+    await writeFile(settingsPath, JSON.stringify(withHooks));
+
+    const manager = new HookManager(settingsPath);
+    await manager.remove();
+
+    const settings = JSON.parse(await readFile(settingsPath, "utf-8"));
+    expect(settings.hooks.SessionStart.length).toBe(1);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe("echo claudefy pull is great");
+    expect(settings.hooks.SessionEnd.length).toBe(1);
+    expect(settings.hooks.SessionEnd[0].hooks[0].command).toBe("echo claudefy push is also great");
   });
 });

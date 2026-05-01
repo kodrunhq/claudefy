@@ -1,6 +1,6 @@
 import { cp, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { existsSync } from "node:fs";
 import { hostname, platform } from "node:os";
 import { ConfigManager } from "../config/config-manager.js";
@@ -13,7 +13,12 @@ import { Encryptor } from "../encryptor/encryptor.js";
 import { SecretScanner } from "../secret-scanner/scanner.js";
 import { ClaudeJsonSync } from "../claude-json-sync/claude-json-sync.js";
 import { output } from "../output.js";
-import { STORE_CONFIG_DIR, STORE_UNKNOWN_DIR, STORE_MANIFEST_FILE } from "../config/defaults.js";
+import {
+  CLAUDEFY_DIR,
+  STORE_CONFIG_DIR,
+  STORE_UNKNOWN_DIR,
+  STORE_MANIFEST_FILE,
+} from "../config/defaults.js";
 import { Lockfile } from "../lockfile/lockfile.js";
 import { Logger } from "../logger.js";
 
@@ -55,7 +60,7 @@ export class PushCommand {
   }
 
   async execute(options: PushOptions): Promise<void> {
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     const log = options.logger;
 
     await log?.log("info", "push", "Push started");
@@ -145,7 +150,7 @@ export class PushCommand {
     }
 
     // 2. Initialize git adapter + per-machine branch
-    const gitAdapter = new GitAdapter(join(this.homeDir, ".claudefy"));
+    const gitAdapter = new GitAdapter(join(this.homeDir, CLAUDEFY_DIR));
     await gitAdapter.initStore(config.backend.url);
     await gitAdapter.ensureMachineBranch(config.machineId);
     if (!options.force) {
@@ -437,7 +442,7 @@ export class PushCommand {
       const storeHash = storeHashes.get(itemName);
       if (hash !== storeHash) {
         const destPath = join(destBaseDir, itemName);
-        const parentDir = join(destPath, "..");
+        const parentDir = dirname(destPath);
         await mkdir(parentDir, { recursive: true });
         await writeFile(destPath, content);
         changedFiles.push(destPath);
@@ -531,7 +536,7 @@ export class PushCommand {
         const storeHash = storeHashes.get(childName);
         if (hash !== storeHash) {
           const destPath = join(destBaseDir, childName);
-          await mkdir(join(destPath, ".."), { recursive: true });
+          await mkdir(dirname(destPath), { recursive: true });
           await writeFile(destPath, content);
           changedFiles.push(destPath);
         }
@@ -589,7 +594,7 @@ export class PushCommand {
     unknownDir: string,
   ): Promise<void> {
     const { computeDiff, printDiffLines } = await import("../diff-utils/diff-utils.js");
-    const claudefyDir = join(this.homeDir, ".claudefy");
+    const claudefyDir = join(this.homeDir, CLAUDEFY_DIR);
     const tmpLocalConfig = join(claudefyDir, ".dryrun-config-tmp");
     const tmpLocalUnknown = join(claudefyDir, ".dryrun-unknown-tmp");
     if (existsSync(tmpLocalConfig)) await rm(tmpLocalConfig, { recursive: true, force: true });

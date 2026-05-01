@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { ConfigManager } from "../config/config-manager.js";
 import { Logger } from "../logger.js";
 import { redactUrl } from "../output.js";
+import { CLAUDEFY_DIR } from "../config/defaults.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -97,7 +98,7 @@ export class DoctorCommand {
   }
 
   private async checkRecentSync(): Promise<DoctorCheck> {
-    const logPath = join(this.homeDir, ".claudefy", "logs", "sync.log");
+    const logPath = join(this.homeDir, CLAUDEFY_DIR, "logs", "sync.log");
     const logger = new Logger(logPath);
     const recent = await logger.readRecent(20);
 

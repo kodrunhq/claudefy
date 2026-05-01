@@ -108,9 +108,7 @@ export class Logger {
       const src = i === 1 ? this.filePath : `${this.filePath}.${i - 1}`;
       const dest = `${this.filePath}.${i}`;
       if (existsSync(src)) {
-        if (i === this.maxFiles) {
-          await rm(dest, { force: true });
-        }
+        await rm(dest, { force: true });
         await rename(src, dest);
       }
     }
